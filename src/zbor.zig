@@ -44,15 +44,14 @@ pub const Encoder = struct {
     buffer: std.ArrayList(u8),
     indefinite_level: usize = 0,
 
-    pub fn init(allocator: Allocator) Encoder {
-        return initCapacity(allocator, 256);
+    pub fn init(allocator: Allocator) !Encoder {
+        return try initCapacity(allocator, 256);
     }
 
-    pub fn initCapacity(allocator: Allocator, capacity: usize) Encoder {
+    pub fn initCapacity(allocator: Allocator, capacity: usize) !Encoder {
         return .{
             .allocator = allocator,
-            .buffer = std.ArrayList(u8).initCapacity(allocator, capacity) catch
-                std.ArrayList(u8){},
+            .buffer = try std.ArrayList(u8).initCapacity(allocator, capacity),
         };
     }
 
@@ -405,7 +404,7 @@ pub const Decoder = struct {
             }
             const full_value = std.mem.readInt(u64, self.data[self.pos..][0..8], .big);
             self.pos += 8;
-            return @intCast(full_value & 0xFFFFFFFF);
+            return @intCast(full_value);
         } else {
             return error.UnsupportedAdditionalInfo;
         }

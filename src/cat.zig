@@ -276,7 +276,7 @@ pub const Cat = struct {
     }
 
     fn serializeTaggedCbor(_: *const Cat, allocator: Allocator, tag: u64, data: []const u8, out: *ArrayList(u8)) !void {
-        var encoder = zbor.Encoder.init(allocator);
+        var encoder = try zbor.Encoder.init(allocator);
         defer encoder.deinit();
         try encoder.pushTag(tag);
         try encoder.pushRaw(data);

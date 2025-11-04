@@ -38,7 +38,9 @@ pub fn generateRandomHex(allocator: std.mem.Allocator, bytes: usize) ![]u8 {
     crypto.random.bytes(random_bytes);
 
     const hex_str = try allocator.alloc(u8, bytes * 2);
-    _ = try std.fmt.bufPrint(hex_str, "{x}", .{random_bytes});
+    for (random_bytes, 0..) |byte, i| {
+        _ = try std.fmt.bufPrint(hex_str[i * 2 .. i * 2 + 2], "{x:0>2}", .{byte});
+    }
     return hex_str;
 }
 

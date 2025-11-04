@@ -119,7 +119,7 @@ fn serializeCbor(
     map: AutoHashMap(i64, []const u8),
     out: *std.ArrayList(u8),
 ) !void {
-    var encoder = zbor.Encoder.init(allocator);
+    var encoder = try zbor.Encoder.init(allocator);
     defer encoder.deinit();
 
     try encoder.beginMap(@intCast(map.count()));
@@ -151,7 +151,7 @@ fn serializeMacStructure(
     payload: []const u8,
     out: *std.ArrayList(u8),
 ) !void {
-    var encoder = zbor.Encoder.init(allocator);
+    var encoder = try zbor.Encoder.init(allocator);
     defer encoder.deinit();
 
     try encoder.beginArray(4);
@@ -172,7 +172,7 @@ fn serializeCoseMac0(
     tag: []const u8,
     out: *std.ArrayList(u8),
 ) !void {
-    var encoder = zbor.Encoder.init(allocator);
+    var encoder = try zbor.Encoder.init(allocator);
     defer encoder.deinit();
 
     try encoder.beginArray(4);

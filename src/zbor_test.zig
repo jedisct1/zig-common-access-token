@@ -11,7 +11,7 @@ test "zbor - unsigned integers" {
 
     for (values) |value| {
         // Encode
-        var encoder = zbor.Encoder.init(allocator);
+        var encoder = try zbor.Encoder.init(allocator);
         defer encoder.deinit();
 
         try encoder.pushInt(value);
@@ -39,7 +39,7 @@ test "zbor - negative integers" {
 
     for (values) |value| {
         // Encode
-        var encoder = zbor.Encoder.init(allocator);
+        var encoder = try zbor.Encoder.init(allocator);
         defer encoder.deinit();
 
         try encoder.pushInt(value);
@@ -72,7 +72,7 @@ test "zbor - byte strings" {
 
     for (values) |value| {
         // Encode
-        var encoder = zbor.Encoder.init(allocator);
+        var encoder = try zbor.Encoder.init(allocator);
         defer encoder.deinit();
 
         try encoder.pushBytes(value);
@@ -107,7 +107,7 @@ test "zbor - text strings" {
 
     for (values) |value| {
         // Encode
-        var encoder = zbor.Encoder.init(allocator);
+        var encoder = try zbor.Encoder.init(allocator);
         defer encoder.deinit();
 
         try encoder.pushText(value);
@@ -132,7 +132,7 @@ test "zbor - arrays" {
     const allocator = testing.allocator;
 
     // Encode an array of integers
-    var encoder = zbor.Encoder.init(allocator);
+    var encoder = try zbor.Encoder.init(allocator);
     defer encoder.deinit();
 
     try encoder.beginArray(3);
@@ -163,7 +163,7 @@ test "zbor - maps" {
     const allocator = testing.allocator;
 
     // Encode a map
-    var encoder = zbor.Encoder.init(allocator);
+    var encoder = try zbor.Encoder.init(allocator);
     defer encoder.deinit();
 
     try encoder.beginMap(2);
@@ -205,7 +205,7 @@ test "zbor - tags" {
     const allocator = testing.allocator;
 
     // Encode a tagged value
-    var encoder = zbor.Encoder.init(allocator);
+    var encoder = try zbor.Encoder.init(allocator);
     defer encoder.deinit();
 
     try encoder.pushTag(1);
@@ -236,7 +236,7 @@ test "zbor - boolean values" {
 
     for (values) |value| {
         // Encode
-        var encoder = zbor.Encoder.init(allocator);
+        var encoder = try zbor.Encoder.init(allocator);
         defer encoder.deinit();
 
         try encoder.pushBool(value);
@@ -260,7 +260,7 @@ test "zbor - null values" {
     const allocator = testing.allocator;
 
     // Encode
-    var encoder = zbor.Encoder.init(allocator);
+    var encoder = try zbor.Encoder.init(allocator);
     defer encoder.deinit();
 
     try encoder.pushNull();
@@ -284,7 +284,7 @@ test "zbor - floating-point values" {
 
     for (values) |value| {
         // Encode
-        var encoder = zbor.Encoder.init(allocator);
+        var encoder = try zbor.Encoder.init(allocator);
         defer encoder.deinit();
 
         try encoder.pushFloat(value);
@@ -308,7 +308,7 @@ test "zbor - indefinite-length arrays" {
     const allocator = testing.allocator;
 
     // Encode an indefinite-length array
-    var encoder = zbor.Encoder.init(allocator);
+    var encoder = try zbor.Encoder.init(allocator);
     defer encoder.deinit();
 
     try encoder.beginArrayIndefinite();

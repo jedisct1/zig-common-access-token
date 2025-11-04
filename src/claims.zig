@@ -543,7 +543,7 @@ pub const Claims = struct {
 
     /// Serializes the claims to CBOR
     pub fn toCbor(self: Claims, allocator: Allocator) ![]u8 {
-        var encoder = zbor.Encoder.init(allocator);
+        var encoder = try zbor.Encoder.init(allocator);
         defer encoder.deinit();
 
         try encoder.beginMap(@intCast(self.claims.count()));
