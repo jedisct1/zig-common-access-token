@@ -97,8 +97,10 @@ pub const Cat = struct {
     }
 
     /// Frees memory associated with the CAT instance.
+    /// Note: The keys hashmap is not owned by Cat and should be freed by the caller.
     pub fn deinit(self: *Cat) void {
-        self.keys.deinit();
+        // The keys hashmap is owned by the caller, so we don't deinit it here
+        _ = self;
     }
 
     /// Generates a CAT token from claims.
@@ -164,15 +166,15 @@ pub const Cat = struct {
 
         // Create the protected header
         var protected_header = AutoHashMap(i64, []const u8).init(self.allocator);
-        defer protected_header.deinit();
+        errdefer protected_header.deinit();
 
         const alg_str = try std.fmt.allocPrint(self.allocator, "{d}", .{ALG_HS256});
-        defer self.allocator.free(alg_str);
+        errdefer self.allocator.free(alg_str);
         try protected_header.put(HEADER_ALG, alg_str);
 
         // Create the unprotected header
         var unprotected_header = AutoHashMap(i64, []const u8).init(self.allocator);
-        defer unprotected_header.deinit();
+        errdefer unprotected_header.deinit();
 
         try unprotected_header.put(HEADER_KID, kid);
 
