@@ -81,6 +81,12 @@ pub const CatValidationOptions = struct {
 
     /// Whether token has been seen before for CATREPLAY validation (default: false)
     token_seen_before: bool = false,
+
+    /// TLS fingerprint type to validate against CATTPRINT claim (optional)
+    fingerprint_type: ?[]const u8 = null,
+
+    /// TLS fingerprint value to validate against CATTPRINT claim (optional)
+    fingerprint_value: ?[]const u8 = null,
 };
 
 /// Common Access Token (CAT) validator and generator.
@@ -253,6 +259,13 @@ pub const Cat = struct {
 
         // Validate CATREPLAY claim
         try validation.validateCatreplay(claims, options.token_seen_before);
+
+        // Validate CATTPRINT (TLS Fingerprint) claim if fingerprint type and value are provided
+        if (options.fingerprint_type) |ftype| {
+            if (options.fingerprint_value) |fvalue| {
+                try validation.validateCattprint(claims, ftype, fvalue);
+            }
+        }
 
         _ = options.ip;
         _ = options.asn;

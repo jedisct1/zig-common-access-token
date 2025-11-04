@@ -54,6 +54,7 @@ pub const Error = error{
     InvalidUriClaim,
     InvalidMethodClaim,
     TokenReplayProhibited,
+    InvalidTlsFingerprintClaim,
 
     // Token format errors
     InvalidTokenFormat,
@@ -118,6 +119,7 @@ pub fn errorToString(err: Error) []const u8 {
         Error.InvalidUriClaim => "Invalid URI claim",
         Error.InvalidMethodClaim => "Invalid HTTP method claim",
         Error.TokenReplayProhibited => "Token replay prohibited",
+        Error.InvalidTlsFingerprintClaim => "Invalid TLS fingerprint claim",
         Error.InvalidTokenFormat => "Invalid token format",
         Error.InvalidTokenStructure => "Invalid token structure",
         Error.InvalidTokenHeader => "Invalid token header",

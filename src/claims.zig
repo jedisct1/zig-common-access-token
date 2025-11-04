@@ -35,6 +35,34 @@ pub const LABEL_CATIFDATA: u64 = 320;
 pub const LABEL_CATDPOP: u64 = 321;
 pub const LABEL_CATIF: u64 = 322;
 pub const LABEL_CATR: u64 = 323;
+pub const LABEL_CATTPRINT: u64 = 324;
+
+// TLS Fingerprint parameter labels (for CATTPRINT claim)
+pub const TPRINT_PARAM_FINGERPRINT_TYPE: u64 = 0;
+pub const TPRINT_PARAM_FINGERPRINT_VALUE: u64 = 1;
+
+// TLS Fingerprint type values
+pub const TPRINT_TYPE_JA3: []const u8 = "JA3";
+pub const TPRINT_TYPE_JA4: []const u8 = "JA4";
+pub const TPRINT_TYPE_JA4S: []const u8 = "JA4S";
+pub const TPRINT_TYPE_JA4H: []const u8 = "JA4H";
+pub const TPRINT_TYPE_JA4L: []const u8 = "JA4L";
+pub const TPRINT_TYPE_JA4X: []const u8 = "JA4X";
+pub const TPRINT_TYPE_JA4SSH: []const u8 = "JA4SSH";
+pub const TPRINT_TYPE_JA4T: []const u8 = "JA4T";
+pub const TPRINT_TYPE_JA4TS: []const u8 = "JA4TS";
+pub const TPRINT_TYPE_JA4TSCAN: []const u8 = "JA4TScan";
+
+// URI component identifiers (for CATU claim)
+pub const URI_COMPONENT_SCHEME: u64 = 0;
+pub const URI_COMPONENT_HOST: u64 = 1;
+pub const URI_COMPONENT_PORT: u64 = 2;
+pub const URI_COMPONENT_PATH: u64 = 3;
+pub const URI_COMPONENT_QUERY: u64 = 4;
+pub const URI_COMPONENT_PARENT_PATH: u64 = 5;
+pub const URI_COMPONENT_FILENAME: u64 = 6;
+pub const URI_COMPONENT_STEM: u64 = 7;
+pub const URI_COMPONENT_EXTENSION: u64 = 8;
 
 /// Represents a value that can be stored in a claim.
 ///

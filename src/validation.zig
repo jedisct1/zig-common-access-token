@@ -9,6 +9,9 @@ const ClaimValue = @import("claims.zig").ClaimValue;
 const LABEL_CATU = @import("claims.zig").LABEL_CATU;
 const LABEL_CATM = @import("claims.zig").LABEL_CATM;
 const LABEL_CATREPLAY = @import("claims.zig").LABEL_CATREPLAY;
+const LABEL_CATTPRINT = @import("claims.zig").LABEL_CATTPRINT;
+const TPRINT_PARAM_FINGERPRINT_TYPE = @import("claims.zig").TPRINT_PARAM_FINGERPRINT_TYPE;
+const TPRINT_PARAM_FINGERPRINT_VALUE = @import("claims.zig").TPRINT_PARAM_FINGERPRINT_VALUE;
 
 /// URI components for CATU validation
 pub const UriComponent = enum(u64) {
@@ -295,5 +298,39 @@ pub fn validateCatreplay(claims: Claims, token_seen_before: bool) !void {
             // Reuse detection is enabled - caller should track token usage
             // but we don't fail validation
         },
+    }
+}
+
+/// Validate CATTPRINT (TLS Fingerprint) claim
+pub fn validateCattprint(claims: Claims, fingerprint_type: []const u8, fingerprint_value: []const u8) !void {
+    const cattprint_claim = claims.getClaim(LABEL_CATTPRINT) orelse return; // No CATTPRINT claim, nothing to validate
+
+    const cattprint_map = switch (cattprint_claim) {
+        .Map => |map| map,
+        else => return Error.InvalidClaimValue,
+    };
+
+    // Get the fingerprint type from the claim
+    const claim_type = cattprint_map.get(TPRINT_PARAM_FINGERPRINT_TYPE) orelse return Error.InvalidTlsFingerprintClaim;
+    const claim_type_str = switch (claim_type) {
+        .String => |s| s,
+        else => return Error.InvalidTlsFingerprintClaim,
+    };
+
+    // Compare fingerprint types (case-insensitive)
+    if (!std.ascii.eqlIgnoreCase(fingerprint_type, claim_type_str)) {
+        return Error.InvalidTlsFingerprintClaim;
+    }
+
+    // Get the fingerprint value from the claim
+    const claim_value = cattprint_map.get(TPRINT_PARAM_FINGERPRINT_VALUE) orelse return Error.InvalidTlsFingerprintClaim;
+    const claim_value_str = switch (claim_value) {
+        .String => |s| s,
+        else => return Error.InvalidTlsFingerprintClaim,
+    };
+
+    // Compare fingerprint values (case-insensitive)
+    if (!std.ascii.eqlIgnoreCase(fingerprint_value, claim_value_str)) {
+        return Error.InvalidTlsFingerprintClaim;
     }
 }
