@@ -55,14 +55,8 @@ pub fn generateRandomHex(allocator: std.mem.Allocator, bytes: usize) ![]u8 {
     const hex_str = try allocator.alloc(u8, bytes * 2);
     errdefer allocator.free(hex_str);
 
-    // Convert bytes to hex
-    for (random_bytes, 0..) |byte, i| {
-        const high_nibble = (byte >> 4) & 0x0F;
-        const low_nibble = byte & 0x0F;
-
-        hex_str[i * 2] = if (high_nibble < 10) '0' + high_nibble else 'a' + (high_nibble - 10);
-        hex_str[i * 2 + 1] = if (low_nibble < 10) '0' + low_nibble else 'a' + (low_nibble - 10);
-    }
+    // Convert bytes to hex using stdlib formatter
+    _ = try std.fmt.bufPrint(hex_str, "{x}", .{random_bytes});
 
     return hex_str;
 }
@@ -98,23 +92,10 @@ pub fn hexToBytes(allocator: std.mem.Allocator, hex: []const u8) ![]u8 {
     const bytes = try allocator.alloc(u8, bytes_len);
     errdefer allocator.free(bytes);
 
-    for (0..bytes_len) |i| {
-        const high = try hexCharToValue(hex[i * 2]);
-        const low = try hexCharToValue(hex[i * 2 + 1]);
-        bytes[i] = (high << 4) | low;
-    }
+    // Use stdlib function to parse hex
+    _ = std.fmt.hexToBytes(bytes, hex) catch return Error.InvalidArgument;
 
     return bytes;
-}
-
-/// Converts a hex character to its numeric value
-fn hexCharToValue(c: u8) !u8 {
-    return switch (c) {
-        '0'...'9' => c - '0',
-        'a'...'f' => c - 'a' + 10,
-        'A'...'F' => c - 'A' + 10,
-        else => Error.InvalidArgument,
-    };
 }
 
 test "base64 encoding and decoding" {
