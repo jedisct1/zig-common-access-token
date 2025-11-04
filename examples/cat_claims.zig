@@ -7,14 +7,17 @@ pub fn main() !void {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
+    // Use arena allocator for temporary allocations
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const temp_allocator = arena.allocator();
+
     // Create a key for token signing
     const key_hex = "403697de87af64611c1d32a05dab0fe1fcb715a86ab435f1ec99192d79569388";
-    const key = try cat.util.hexToBytes(allocator, key_hex);
-    defer allocator.free(key);
+    const key = try cat.util.hexToBytes(temp_allocator, key_hex);
 
     // Create a map of keys
-    var keys = std.StringHashMap([]const u8).init(allocator);
-    defer keys.deinit();
+    var keys = std.StringHashMap([]const u8).init(temp_allocator);
     try keys.put("Symmetric256", key);
 
     // Create CAT options
@@ -28,8 +31,7 @@ pub fn main() !void {
     defer cat_instance.deinit();
 
     // Create claims
-    var claims = cat.Claims.init(allocator);
-    defer claims.deinit();
+    var claims = cat.Claims.init(temp_allocator);
 
     // Set standard claims
     try claims.setIssuer("eyevinn");
@@ -44,15 +46,7 @@ pub fn main() !void {
     try claims.setCatVersion(1);
 
     // Create a CATR (renewal) claim
-    var catr_map = std.AutoHashMap(u64, cat.ClaimValue).init(allocator);
-    defer {
-        var it = catr_map.iterator();
-        while (it.next()) |entry| {
-            var value = entry.value_ptr.*;
-            value.deinit();
-        }
-        catr_map.deinit();
-    }
+    var catr_map = std.AutoHashMap(u64, cat.ClaimValue).init(temp_allocator);
 
     // Type: header
     try catr_map.put(0, cat.ClaimValue{ .Integer = 2 }); // 2 = header
@@ -70,18 +64,10 @@ pub fn main() !void {
     try claims.setClaim(cat.claims.LABEL_CATR, cat.ClaimValue{ .Map = catr_map });
 
     // Create a CATU (URI) claim
-    var catu_map = std.AutoHashMap(u64, cat.ClaimValue).init(allocator);
-    defer {
-        var it = catu_map.iterator();
-        while (it.next()) |entry| {
-            var value = entry.value_ptr.*;
-            value.deinit();
-        }
-        catu_map.deinit();
-    }
+    var catu_map = std.AutoHashMap(u64, cat.ClaimValue).init(temp_allocator);
 
     // Scheme
-    var scheme_map = std.AutoHashMap(u64, cat.ClaimValue).init(allocator);
+    var scheme_map = std.AutoHashMap(u64, cat.ClaimValue).init(temp_allocator);
     try scheme_map.put(0, cat.ClaimValue{ .String = "https" }); // exact-match: https
     try catu_map.put(0, cat.ClaimValue{ .Map = scheme_map });
 
@@ -96,7 +82,7 @@ pub fn main() !void {
         .generate_cwt_id = true,
     };
 
-    // Generate the token
+    // Generate the token (uses allocator for final result, arena for temps)
     const token = try cat_instance.generate(claims, generate_options);
     defer allocator.free(token);
 

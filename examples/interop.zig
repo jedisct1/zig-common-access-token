@@ -7,6 +7,11 @@ pub fn main() !void {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
+    // Use arena allocator for temporary allocations
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const temp_allocator = arena.allocator();
+
     // Get the token from command line arguments
     const args = try std.process.argsAlloc(std.heap.page_allocator);
     defer std.process.argsFree(std.heap.page_allocator, args);
@@ -20,8 +25,7 @@ pub fn main() !void {
         try stdout.print("Generating a token to be validated by the NodeJS implementation...\n", .{});
 
         // Create a simple token
-        const token = try cat.util.toBase64NoPadding(allocator, &[_]u8{0xA0});
-        defer allocator.free(token);
+        const token = try cat.util.toBase64NoPadding(temp_allocator, &[_]u8{0xA0});
 
         try stdout.print("Generated token: {s}\n", .{token});
         try stdout.print("Use this token with the NodeJS validator example.\n", .{});
@@ -32,8 +36,7 @@ pub fn main() !void {
         const token = args[1];
 
         // Decode the token
-        const decoded = try cat.util.fromBase64Url(allocator, token);
-        defer allocator.free(decoded);
+        const decoded = try cat.util.fromBase64Url(temp_allocator, token);
 
         // Print the decoded token
         try stdout.print("Decoded token: ", .{});
@@ -43,8 +46,7 @@ pub fn main() !void {
         try stdout.print("\n", .{});
 
         // Create a dummy claims object
-        var claims = cat.Claims.init(allocator);
-        defer claims.deinit();
+        var claims = cat.Claims.init(temp_allocator);
 
         try claims.setIssuer("dummy");
         try claims.setSubject("user123");

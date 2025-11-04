@@ -279,10 +279,11 @@ pub const Encoder = struct {
         try self.buffer.appendSlice(self.allocator,data);
     }
 
-    /// Finish encoding and return the result
-    pub fn finish(self: *Encoder) ![]u8 {
-        const result = try self.allocator.dupe(u8, self.buffer.items);
-        return result;
+    /// Finish encoding and return a slice to the encoded data.
+    /// The returned slice is valid as long as the encoder is not modified.
+    /// If you need ownership of the data, explicitly dupe it with allocator.dupe().
+    pub fn finish(self: *Encoder) []const u8 {
+        return self.buffer.items;
     }
 };
 

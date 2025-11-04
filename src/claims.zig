@@ -284,6 +284,28 @@ pub const Claims = struct {
 
     /// Sets a generic claim
     pub fn setClaim(self: *Claims, label: u64, value: ClaimValue) !void {
+        // Free the old value if it exists to prevent memory leaks
+        if (self.claims.getPtr(label)) |old_value| {
+            switch (old_value.*) {
+                .String => |str| self.allocator.free(str),
+                .Bytes => |bytes| self.allocator.free(bytes),
+                .Array => |*array| {
+                    for (array.items) |*item| {
+                        item.deinit();
+                    }
+                    array.deinit(self.allocator);
+                },
+                .Map => |*map| {
+                    var map_it = map.iterator();
+                    while (map_it.next()) |map_entry| {
+                        var map_value = map_entry.value_ptr.*;
+                        map_value.deinit();
+                    }
+                    map.deinit();
+                },
+                else => {},
+            }
+        }
         try self.claims.put(label, try value.clone(self.allocator));
     }
 
@@ -350,8 +372,8 @@ pub const Claims = struct {
         // End the map
         try encoder.endMap();
 
-        // Get the encoded CBOR
-        return encoder.finish();
+        // Get the encoded CBOR and duplicate for caller ownership
+        return allocator.dupe(u8, encoder.finish());
     }
 
     /// Deserializes claims from CBOR

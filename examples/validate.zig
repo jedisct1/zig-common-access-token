@@ -18,12 +18,16 @@ pub fn main() !void {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
+    // Use arena allocator for temporary allocations
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const temp_allocator = arena.allocator();
+
     // Decode the token
-    const decoded = cat.util.fromBase64Url(allocator, token) catch |err| {
+    const decoded = cat.util.fromBase64Url(temp_allocator, token) catch |err| {
         std.debug.print("Error decoding token: {any}\n", .{err});
         return;
     };
-    defer allocator.free(decoded);
 
     // Print the decoded token
     var stdout_buffer: [4096]u8 = undefined;
@@ -36,8 +40,7 @@ pub fn main() !void {
     try stdout.print("\n", .{});
 
     // Create a dummy claims object
-    var claims = cat.Claims.init(allocator);
-    defer claims.deinit();
+    var claims = cat.Claims.init(temp_allocator);
 
     try claims.setIssuer("dummy");
     try claims.setSubject("user123");

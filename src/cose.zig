@@ -202,9 +202,8 @@ fn serializeCbor(
     // End the map
     try encoder.endMap();
 
-    // Get the encoded CBOR
-    const cbor_data = try encoder.finish();
-    defer allocator.free(cbor_data);
+    // Get the encoded CBOR (no copy needed with arena allocator)
+    const cbor_data = encoder.finish();
 
     // Append the encoded CBOR to the output
     try out.appendSlice(allocator, cbor_data);
@@ -240,9 +239,8 @@ fn serializeMacStructure(
     // End the array
     try encoder.endArray();
 
-    // Get the encoded CBOR
-    const cbor_data = try encoder.finish();
-    defer allocator.free(cbor_data);
+    // Get the encoded CBOR (no copy needed with arena allocator)
+    const cbor_data = encoder.finish();
 
     // Append the encoded CBOR to the output
     try out.appendSlice(allocator, cbor_data);
@@ -279,9 +277,8 @@ fn serializeCoseMac0(
     // End the array
     try encoder.endArray();
 
-    // Get the encoded CBOR
-    const cbor_data = try encoder.finish();
-    defer allocator.free(cbor_data);
+    // Get the encoded CBOR (no copy needed with arena allocator)
+    const cbor_data = encoder.finish();
 
     // Append the encoded CBOR to the output
     try out.appendSlice(allocator, cbor_data);

@@ -7,9 +7,13 @@ pub fn main() !void {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
+    // Use arena allocator for temporary allocations
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const temp_allocator = arena.allocator();
+
     // Create a simple token
-    const token = try cat.util.toBase64NoPadding(allocator, &[_]u8{0xA0});
-    defer allocator.free(token);
+    const token = try cat.util.toBase64NoPadding(temp_allocator, &[_]u8{0xA0});
 
     // Print the token
     var stdout_buffer: [4096]u8 = undefined;
@@ -18,8 +22,7 @@ pub fn main() !void {
     try stdout.print("Generated token: {s}\n", .{token});
 
     // Create claims
-    var claims = cat.Claims.init(allocator);
-    defer claims.deinit();
+    var claims = cat.Claims.init(temp_allocator);
 
     try claims.setIssuer("eyevinn");
     try claims.setSubject("user123");

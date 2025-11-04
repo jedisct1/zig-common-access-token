@@ -105,9 +105,13 @@ pub const Cat = struct {
 
     /// Generates a CAT token from claims.
     pub fn generate(self: *const Cat, claims: Claims, options: CatGenerateOptions) ![]const u8 {
-        // Create a new claims object instead of using the original
-        var claims_copy = Claims.init(self.allocator);
-        errdefer claims_copy.deinit();
+        // Use an arena allocator for all temporary allocations
+        var arena = std.heap.ArenaAllocator.init(self.allocator);
+        defer arena.deinit();
+        const temp_allocator = arena.allocator();
+
+        // Create a new claims object with the arena allocator
+        var claims_copy = Claims.init(temp_allocator);
 
         // Copy all claims from the original
         var it = claims.claims.iterator();
@@ -117,32 +121,35 @@ pub const Cat = struct {
 
         // Add a random CWT ID if requested
         if (options.generate_cwt_id and claims_copy.getCwtId() == null) {
-            const cti = try util.generateRandomHex(self.allocator, 16);
+            const cti = try util.generateRandomHex(temp_allocator, 16);
             try claims_copy.setCwtId(cti);
         }
 
         // Generate the token based on the validation type
+        // The result is allocated with the original allocator, so it outlives the arena
         const result = switch (options.validation_type) {
-            .Mac => try self.createMac(claims_copy, options.kid, options.alg),
+            .Mac => try self.createMac(temp_allocator, claims_copy, options.kid, options.alg),
             .Sign => return Error.Unexpected, // Not implemented
             .None => return Error.Unexpected, // Not implemented
         };
-
-        // Free the claims_copy memory
-        claims_copy.deinit();
 
         return result;
     }
 
     /// Validates a CAT token and returns the claims.
     pub fn validate(self: *const Cat, token: []const u8, validation_type: CatValidationType, options: CatValidationOptions) !Claims {
-        // Decode the token from base64
-        const token_bytes = try util.fromBase64Url(self.allocator, token);
-        defer self.allocator.free(token_bytes);
+        // Use an arena allocator for temporary allocations during validation
+        var arena = std.heap.ArenaAllocator.init(self.allocator);
+        defer arena.deinit();
+        const temp_allocator = arena.allocator();
+
+        // Decode the token from base64 (temporary allocation)
+        const token_bytes = try util.fromBase64Url(temp_allocator, token);
 
         // Validate the token based on the validation type
+        // The returned Claims uses self.allocator, so it outlives the arena
         var claims = switch (validation_type) {
-            .Mac => try self.validateMac(token_bytes),
+            .Mac => try self.validateMac(temp_allocator, token_bytes),
             .Sign => return Error.Unexpected, // Not implemented
             .None => return Error.Unexpected, // Not implemented
         };
@@ -155,72 +162,59 @@ pub const Cat = struct {
     }
 
     /// Creates a MAC (Message Authentication Code) for the given claims.
-    fn createMac(self: *const Cat, claims: Claims, kid: []const u8, _: []const u8) ![]const u8 {
+    fn createMac(self: *const Cat, temp_allocator: Allocator, claims: Claims, kid: []const u8, _: []const u8) ![]const u8 {
         // Get the key for the given key ID
         const key = self.getKey(kid) orelse return Error.KeyNotFound;
 
         // Serialize the claims to CBOR
         var claims_cbor = ArrayList(u8){};
-        defer claims_cbor.deinit(self.allocator);
-
-        try self.serializeClaims(claims, &claims_cbor);
+        try self.serializeClaims(temp_allocator, claims, &claims_cbor);
 
         // Create the protected header
-        var protected_header = AutoHashMap(i64, []const u8).init(self.allocator);
-        errdefer protected_header.deinit();
-
-        const alg_str = try std.fmt.allocPrint(self.allocator, "{d}", .{ALG_HS256});
-        defer self.allocator.free(alg_str);
+        var protected_header = AutoHashMap(i64, []const u8).init(temp_allocator);
+        const alg_str = try std.fmt.allocPrint(temp_allocator, "{d}", .{ALG_HS256});
         try protected_header.put(HEADER_ALG, alg_str);
 
         // Create the unprotected header
-        var unprotected_header = AutoHashMap(i64, []const u8).init(self.allocator);
-        errdefer unprotected_header.deinit();
-
+        var unprotected_header = AutoHashMap(i64, []const u8).init(temp_allocator);
         try unprotected_header.put(HEADER_KID, kid);
 
         // Create the COSE_Mac0 structure and compute the MAC
         var cose_mac0 = CoseMac0.init(
-            self.allocator,
+            temp_allocator,
             protected_header,
             unprotected_header,
             claims_cbor.items,
         );
-        defer cose_mac0.deinit();
 
         try cose_mac0.createTag(key);
 
         // Serialize the COSE_Mac0 structure
         var cose_mac0_cbor = ArrayList(u8){};
-        defer cose_mac0_cbor.deinit(self.allocator);
-
         try cose_mac0.toCbor(&cose_mac0_cbor);
 
         // If CWT tag is expected, wrap the COSE_Mac0 in the appropriate tags
         if (self.expect_cwt_tag) {
             var result = ArrayList(u8){};
-            defer result.deinit(self.allocator);
 
             // First tag with COSE_Mac0 tag, then with CWT tag
-            try self.serializeTaggedCbor(TAG_COSE_MAC0, cose_mac0_cbor.items, &result);
+            try self.serializeTaggedCbor(temp_allocator, TAG_COSE_MAC0, cose_mac0_cbor.items, &result);
 
             var tagged_cose_mac0_cbor = ArrayList(u8){};
-            defer tagged_cose_mac0_cbor.deinit(self.allocator);
+            try self.serializeTaggedCbor(temp_allocator, TAG_CWT, result.items, &tagged_cose_mac0_cbor);
 
-            try self.serializeTaggedCbor(TAG_CWT, result.items, &tagged_cose_mac0_cbor);
-
-            // Encode the result as base64
+            // Encode the result as base64 - this uses the original allocator so it outlives the arena
             return try util.toBase64NoPadding(self.allocator, tagged_cose_mac0_cbor.items);
         } else {
-            // Encode the result as base64
+            // Encode the result as base64 - this uses the original allocator so it outlives the arena
             return try util.toBase64NoPadding(self.allocator, cose_mac0_cbor.items);
         }
     }
 
     /// Validates a MAC (Message Authentication Code) token and returns the claims.
-    fn validateMac(self: *const Cat, token_bytes: []const u8) !Claims {
-        // Parse the token
-        var decoder = zbor.Decoder.init(token_bytes, self.allocator);
+    fn validateMac(self: *const Cat, temp_allocator: Allocator, token_bytes: []const u8) !Claims {
+        // Parse the token (using temp allocator for temporary data)
+        var decoder = zbor.Decoder.init(token_bytes, temp_allocator);
         defer decoder.deinit();
 
         // If CWT tag is expected, unwrap the CWT tag and COSE_Mac0 tag
@@ -244,9 +238,8 @@ pub const Cat = struct {
             return Error.CborDecodingError;
         }
 
-        // Read the protected header
-        const protected_header = try decoder.readBytes(self.allocator);
-        defer self.allocator.free(protected_header);
+        // Read the protected header (temporary)
+        const protected_header = try decoder.readBytes(temp_allocator);
 
         // Read the unprotected header
         const unprotected_header_type = try decoder.peekMajorType();
@@ -265,24 +258,24 @@ pub const Cat = struct {
         }
         try decoder.endMap();
 
-        // Read the payload (claims)
-        const payload = try decoder.readBytes(self.allocator);
-        defer self.allocator.free(payload);
+        // Read the payload (claims) - temporary
+        const payload = try decoder.readBytes(temp_allocator);
 
-        // Read the tag
-        const tag = try decoder.readBytes(self.allocator);
-        defer self.allocator.free(tag);
+        // Read the tag - temporary
+        const tag = try decoder.readBytes(temp_allocator);
+        _ = tag; // unused for now
 
         try decoder.endArray();
 
-        // Parse the protected header to get the algorithm
-        var protected_decoder = zbor.Decoder.init(protected_header, self.allocator);
+        // Parse the protected header to get the algorithm (if needed in future)
+        var protected_decoder = zbor.Decoder.init(protected_header, temp_allocator);
         defer protected_decoder.deinit();
 
         // Skip the protected header for now
         _ = try protected_decoder.skip();
 
         // Parse the payload to get the claims
+        // This uses self.allocator so the Claims outlive the temp_allocator
         return try Claims.fromCbor(self.allocator, payload);
     }
 
@@ -327,18 +320,17 @@ pub const Cat = struct {
     }
 
     /// Serializes claims to CBOR.
-    fn serializeClaims(_: *const Cat, claims: Claims, out: *ArrayList(u8)) !void {
+    fn serializeClaims(_: *const Cat, allocator: Allocator, claims: Claims, out: *ArrayList(u8)) !void {
         // Use the Claims.toCbor method to serialize the claims
         const cbor_data = try claims.toCbor(claims.allocator);
-        defer claims.allocator.free(cbor_data);
 
         // Append the serialized claims to the output
-        try out.appendSlice(claims.allocator, cbor_data);
+        try out.appendSlice(allocator, cbor_data);
     }
 
     /// Serializes a tagged CBOR value.
-    fn serializeTaggedCbor(self: *const Cat, tag: u64, data: []const u8, out: *ArrayList(u8)) !void {
-        var encoder = zbor.Encoder.init(self.allocator);
+    fn serializeTaggedCbor(_: *const Cat, allocator: Allocator, tag: u64, data: []const u8, out: *ArrayList(u8)) !void {
+        var encoder = zbor.Encoder.init(allocator);
         defer encoder.deinit();
 
         // Create a tagged value
@@ -348,11 +340,10 @@ pub const Cat = struct {
         try encoder.pushRaw(data);
 
         // Get the encoded CBOR
-        const cbor_data = try encoder.finish();
-        defer self.allocator.free(cbor_data);
+        const cbor_data = encoder.finish();
 
         // Append the encoded CBOR to the output
-        try out.appendSlice(self.allocator, cbor_data);
+        try out.appendSlice(allocator, cbor_data);
     }
 };
 
