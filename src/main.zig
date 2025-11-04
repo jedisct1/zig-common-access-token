@@ -1,21 +1,14 @@
-// Common Access Token (CAT) implementation in Zig
-//
-// This library provides functionality for generating and validating
-// Common Access Tokens (CAT) using HMAC signatures.
-//
-// Based on the CTA-5007 specification and compatible with other
-// implementations like node-cat and common-access-token (Rust).
-
+///! Common Access Token (CAT) implementation
+///!
+///! HMAC-based token generation and validation per CTA-5007.
+///! Compatible with node-cat and rust-cat implementations.
 pub const cat = @import("cat.zig");
 pub const claims = @import("claims.zig");
 pub const cose = @import("cose.zig");
 pub const errors = @import("error.zig");
 pub const util = @import("util.zig");
-
-// Import zbor for CBOR serialization/deserialization
 pub const zbor = @import("zbor.zig");
 
-// Re-export main types and functions for easier use
 pub const Cat = cat.Cat;
 pub const CatOptions = cat.CatOptions;
 pub const CatGenerateOptions = cat.CatGenerateOptions;
@@ -26,7 +19,6 @@ pub const ClaimValue = claims.ClaimValue;
 pub const Error = errors.Error;
 
 test {
-    // Run all tests
     _ = @import("cat.zig");
     _ = @import("claims.zig");
     _ = @import("cose.zig");

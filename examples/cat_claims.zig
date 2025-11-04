@@ -2,79 +2,52 @@ const std = @import("std");
 const cat = @import("cat");
 
 pub fn main() !void {
-    // Initialize the allocator
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    // Use arena allocator for temporary allocations
     var arena = std.heap.ArenaAllocator.init(allocator);
     defer arena.deinit();
     const temp_allocator = arena.allocator();
 
-    // Create a key for token signing
     const key_hex = "403697de87af64611c1d32a05dab0fe1fcb715a86ab435f1ec99192d79569388";
     const key = try cat.util.hexToBytes(temp_allocator, key_hex);
 
-    // Create a map of keys
     var keys = std.StringHashMap([]const u8).init(temp_allocator);
     try keys.put("Symmetric256", key);
 
-    // Create CAT options
     const cat_options = cat.CatOptions{
         .keys = keys,
         .expect_cwt_tag = true,
     };
 
-    // Create a CAT instance
     var cat_instance = cat.Cat.init(allocator, cat_options);
     defer cat_instance.deinit();
 
-    // Create claims
     var claims = cat.Claims.init(temp_allocator);
 
-    // Set standard claims
     try claims.setIssuer("eyevinn");
     try claims.setSubject("user123");
     try claims.setAudience("service");
 
     const now = cat.util.currentTimeSecs();
-    try claims.setExpiration(now + 120); // 2 minutes from now
+    try claims.setExpiration(now + 120);
     try claims.setIssuedAt(now);
-
-    // Set CAT version
     try claims.setCatVersion(1);
 
-    // Create a CATR (renewal) claim
     var catr_map = std.AutoHashMap(u64, cat.ClaimValue).init(temp_allocator);
-
-    // Type: header
-    try catr_map.put(0, cat.ClaimValue{ .Integer = 2 }); // 2 = header
-
-    // Header name
+    try catr_map.put(0, cat.ClaimValue{ .Integer = 2 });
     try catr_map.put(4, cat.ClaimValue{ .String = "cta-common-access-token" });
-
-    // Expiration add
     try catr_map.put(1, cat.ClaimValue{ .Integer = 120 });
-
-    // Deadline
     try catr_map.put(2, cat.ClaimValue{ .Integer = 60 });
-
-    // Add the CATR claim to the claims
     try claims.setClaim(cat.claims.LABEL_CATR, cat.ClaimValue{ .Map = catr_map });
 
-    // Create a CATU (URI) claim
     var catu_map = std.AutoHashMap(u64, cat.ClaimValue).init(temp_allocator);
-
-    // Scheme
     var scheme_map = std.AutoHashMap(u64, cat.ClaimValue).init(temp_allocator);
-    try scheme_map.put(0, cat.ClaimValue{ .String = "https" }); // exact-match: https
+    try scheme_map.put(0, cat.ClaimValue{ .String = "https" });
     try catu_map.put(0, cat.ClaimValue{ .Map = scheme_map });
-
-    // Add the CATU claim to the claims
     try claims.setClaim(cat.claims.LABEL_CATU, cat.ClaimValue{ .Map = catu_map });
 
-    // Create token generation options
     const generate_options = cat.CatGenerateOptions{
         .validation_type = cat.CatValidationType.Mac,
         .alg = "HS256",
@@ -82,11 +55,9 @@ pub fn main() !void {
         .generate_cwt_id = true,
     };
 
-    // Generate the token (uses allocator for final result, arena for temps)
     const token = try cat_instance.generate(claims, generate_options);
     defer allocator.free(token);
 
-    // Print the token
     var stdout_buffer: [4096]u8 = undefined;
     var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
     const stdout = &stdout_writer.interface;

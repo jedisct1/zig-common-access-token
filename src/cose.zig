@@ -7,16 +7,11 @@ const testing = std.testing;
 const Error = @import("error.zig").Error;
 const zbor = @import("zbor.zig");
 
-// COSE algorithm identifiers
-pub const ALG_HS256: i64 = 5; // HMAC 256-bit SHA-256
-
-// COSE header parameters
-pub const HEADER_ALG: i64 = 1; // Algorithm
-pub const HEADER_KID: i64 = 4; // Key ID
-
-// COSE tags
-pub const TAG_COSE_MAC0: u64 = 17; // COSE_Mac0 tag
-pub const TAG_CWT: u64 = 61; // CWT tag
+pub const ALG_HS256: i64 = 5;
+pub const HEADER_ALG: i64 = 1;
+pub const HEADER_KID: i64 = 4;
+pub const TAG_COSE_MAC0: u64 = 17;
+pub const TAG_CWT: u64 = 61;
 
 /// COSE_Mac0 structure as defined in RFC 8152 Section 6.2.
 ///

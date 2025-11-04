@@ -1,68 +1,53 @@
-///! CBOR (Concise Binary Object Representation) implementation
-///!
-///! This module provides functionality for encoding and decoding CBOR data
-///! as defined in RFC 7049 and RFC 8949.
-///!
-///! Performance optimizations:
-///! - Uses preallocated buffers where possible
-///! - Minimizes memory allocations
-///! - Provides streaming encoding/decoding for large payloads
+///! CBOR encoder/decoder per RFC 8949
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const testing = std.testing;
 
-/// CBOR major types as defined in RFC 8949
 pub const MajorType = enum(u3) {
-    UnsignedInt = 0, // Major type 0: unsigned integer
-    NegativeInt = 1, // Major type 1: negative integer
-    ByteString = 2, // Major type 2: byte string
-    TextString = 3, // Major type 3: text string
-    Array = 4, // Major type 4: array
-    Map = 5, // Major type 5: map
-    Tag = 6, // Major type 6: tag
-    Simple = 7, // Major type 7: simple/float
+    UnsignedInt = 0,
+    NegativeInt = 1,
+    ByteString = 2,
+    TextString = 3,
+    Array = 4,
+    Map = 5,
+    Tag = 6,
+    Simple = 7,
 
-    /// Convert a byte to a major type
     pub fn fromByte(byte: u8) MajorType {
         return @enumFromInt((byte >> 5) & 0x7);
     }
 
-    /// Convert a major type to a byte (with additional info 0)
+    /// Returns the type byte with additional info set to 0
     pub fn toByte(self: MajorType) u8 {
         return @as(u8, @intFromEnum(self)) << 5;
     }
 };
 
-/// CBOR additional info values
 pub const AdditionalInfo = struct {
-    pub const DIRECT: u8 = 23; // Values 0-23 are encoded directly in the additional info
-    pub const ONE_BYTE: u8 = 24; // Value is in the next 1 byte
-    pub const TWO_BYTES: u8 = 25; // Value is in the next 2 bytes
-    pub const FOUR_BYTES: u8 = 26; // Value is in the next 4 bytes
-    pub const EIGHT_BYTES: u8 = 27; // Value is in the next 8 bytes
-    pub const INDEFINITE: u8 = 31; // Indefinite length
+    pub const DIRECT: u8 = 23;
+    pub const ONE_BYTE: u8 = 24;
+    pub const TWO_BYTES: u8 = 25;
+    pub const FOUR_BYTES: u8 = 26;
+    pub const EIGHT_BYTES: u8 = 27;
+    pub const INDEFINITE: u8 = 31;
 };
 
-/// CBOR simple values
 pub const SimpleValue = struct {
-    pub const FALSE: u8 = 20; // false
-    pub const TRUE: u8 = 21; // true
-    pub const NULL: u8 = 22; // null
-    pub const UNDEFINED: u8 = 23; // undefined
+    pub const FALSE: u8 = 20;
+    pub const TRUE: u8 = 21;
+    pub const NULL: u8 = 22;
+    pub const UNDEFINED: u8 = 23;
 };
 
-/// CBOR encoder with performance optimizations
 pub const Encoder = struct {
     allocator: Allocator,
     buffer: std.ArrayList(u8),
-    indefinite_level: usize = 0, // Track nesting level of indefinite-length items
+    indefinite_level: usize = 0,
 
-    /// Initialize a new encoder with default capacity
     pub fn init(allocator: Allocator) Encoder {
-        return initCapacity(allocator, 256); // Default to 256 bytes
+        return initCapacity(allocator, 256);
     }
 
-    /// Initialize a new encoder with specified capacity
     pub fn initCapacity(allocator: Allocator, capacity: usize) Encoder {
         return .{
             .allocator = allocator,
@@ -71,63 +56,51 @@ pub const Encoder = struct {
         };
     }
 
-    /// Free resources
     pub fn deinit(self: *Encoder) void {
         self.buffer.deinit(self.allocator);
     }
 
-    /// Reset the encoder to be reused
     pub fn reset(self: *Encoder) void {
         self.buffer.clearRetainingCapacity();
         self.indefinite_level = 0;
     }
 
-    /// Get the current size of the encoded data
     pub fn len(self: *const Encoder) usize {
         return self.buffer.items.len;
     }
 
-    /// Begin a fixed-length CBOR array
     pub fn beginArray(self: *Encoder, length: usize) !void {
         try self.writeTypeAndValue(MajorType.Array, length);
     }
 
-    /// Begin an indefinite-length CBOR array
     pub fn beginArrayIndefinite(self: *Encoder) !void {
         try self.buffer.append(self.allocator, MajorType.Array.toByte() | AdditionalInfo.INDEFINITE);
         self.indefinite_level += 1;
     }
 
-    /// End a CBOR array (only needed for indefinite-length arrays)
     pub fn endArray(self: *Encoder) !void {
         try self.endContainer();
     }
 
-    /// End a CBOR container (array or map)
     fn endContainer(self: *Encoder) !void {
         if (self.indefinite_level > 0) {
-            try self.buffer.append(self.allocator, 0xFF); // Break code
+            try self.buffer.append(self.allocator, 0xFF);
             self.indefinite_level -= 1;
         }
     }
 
-    /// Begin a fixed-length CBOR map
     pub fn beginMap(self: *Encoder, length: usize) !void {
         try self.writeTypeAndValue(MajorType.Map, length);
     }
 
-    /// Begin an indefinite-length CBOR map
     pub fn beginMapIndefinite(self: *Encoder) !void {
         try self.buffer.append(self.allocator, MajorType.Map.toByte() | AdditionalInfo.INDEFINITE);
         self.indefinite_level += 1;
     }
 
-    /// End a CBOR map (only needed for indefinite-length maps)
     pub fn endMap(self: *Encoder) !void {
         try self.endContainer();
     }
-
-    /// Helper function to write a type and value
     fn writeTypeAndValue(self: *Encoder, major_type: MajorType, value: anytype) !void {
         const T = @TypeOf(value);
         const unsigned_value = if (T == usize or T == u8 or T == u16 or T == u32 or T == u64 or T == u128)
@@ -162,33 +135,27 @@ pub const Encoder = struct {
         }
     }
 
-    /// Push an integer
     pub fn pushInt(self: *Encoder, value: anytype) !void {
         if (value >= 0) {
             try self.writeTypeAndValue(MajorType.UnsignedInt, value);
         } else {
-            // For negative integers, CBOR uses -1 - n encoding
             const abs_value = @as(u64, @intCast(-(value + 1)));
             try self.writeTypeAndValue(MajorType.NegativeInt, abs_value);
         }
     }
 
-    /// Push a boolean value
     pub fn pushBool(self: *Encoder, value: bool) !void {
         try self.buffer.append(self.allocator, MajorType.Simple.toByte() | (if (value) SimpleValue.TRUE else SimpleValue.FALSE));
     }
 
-    /// Push a null value
     pub fn pushNull(self: *Encoder) !void {
         try self.buffer.append(self.allocator, MajorType.Simple.toByte() | SimpleValue.NULL);
     }
 
-    /// Push an undefined value
     pub fn pushUndefined(self: *Encoder) !void {
         try self.buffer.append(self.allocator, MajorType.Simple.toByte() | SimpleValue.UNDEFINED);
     }
 
-    /// Push a floating-point value
     pub fn pushFloat(self: *Encoder, value: anytype) !void {
         const T = @TypeOf(value);
 
@@ -215,40 +182,33 @@ pub const Encoder = struct {
         }
     }
 
-    /// Push a byte string
     pub fn pushBytes(self: *Encoder, bytes: []const u8) !void {
         try self.writeTypeAndValue(MajorType.ByteString, bytes.len);
         try self.buffer.appendSlice(self.allocator, bytes);
     }
 
-    /// Push an indefinite-length byte string
     pub fn pushBytesIndefinite(self: *Encoder) !void {
         try self.pushIndefiniteString(MajorType.ByteString);
     }
 
-    /// Push a text string
     pub fn pushText(self: *Encoder, text: []const u8) !void {
         try self.writeTypeAndValue(MajorType.TextString, text.len);
         try self.buffer.appendSlice(self.allocator, text);
     }
 
-    /// Push an indefinite-length text string
     pub fn pushTextIndefinite(self: *Encoder) !void {
         try self.pushIndefiniteString(MajorType.TextString);
     }
 
-    /// Helper to push an indefinite-length string (byte or text)
     fn pushIndefiniteString(self: *Encoder, major_type: MajorType) !void {
         try self.buffer.append(self.allocator, major_type.toByte() | AdditionalInfo.INDEFINITE);
         self.indefinite_level += 1;
     }
 
-    /// Push a tag
     pub fn pushTag(self: *Encoder, tag: u64) !void {
         try self.writeTypeAndValue(MajorType.Tag, tag);
     }
 
-    /// Push a break code (to end indefinite-length items)
     pub fn pushBreak(self: *Encoder) !void {
         try self.buffer.append(self.allocator, 0xFF);
         if (self.indefinite_level > 0) {
@@ -256,27 +216,22 @@ pub const Encoder = struct {
         }
     }
 
-    /// Push raw CBOR data
     pub fn pushRaw(self: *Encoder, data: []const u8) !void {
         try self.buffer.appendSlice(self.allocator, data);
     }
 
-    /// Finish encoding and return a slice to the encoded data.
-    /// The returned slice is valid as long as the encoder is not modified.
-    /// If you need ownership of the data, explicitly dupe it with allocator.dupe().
+    /// Returns slice valid until encoder is modified or freed
     pub fn finish(self: *Encoder) []const u8 {
         return self.buffer.items;
     }
 };
 
-/// CBOR decoder with performance optimizations and support for more CBOR features
 pub const Decoder = struct {
     data: []const u8,
     allocator: Allocator,
     pos: usize = 0,
-    indefinite_level: usize = 0, // Track nesting level of indefinite-length items
+    indefinite_level: usize = 0,
 
-    /// Initialize a new decoder
     pub fn init(data: []const u8, allocator: Allocator) Decoder {
         return .{
             .data = data,
@@ -284,27 +239,22 @@ pub const Decoder = struct {
         };
     }
 
-    /// Free resources
     pub fn deinit(_: *Decoder) void {}
 
-    /// Reset the decoder to be reused with new data
     pub fn reset(self: *Decoder, data: []const u8) void {
         self.data = data;
         self.pos = 0;
         self.indefinite_level = 0;
     }
 
-    /// Get the current position in the data
     pub fn position(self: *const Decoder) usize {
         return self.pos;
     }
 
-    /// Check if we've reached the end of the data
     pub fn isAtEnd(self: *const Decoder) bool {
         return self.pos >= self.data.len;
     }
 
-    /// Get the remaining data
     pub fn remaining(self: *const Decoder) []const u8 {
         if (self.pos >= self.data.len) {
             return &[_]u8{};
@@ -312,7 +262,6 @@ pub const Decoder = struct {
         return self.data[self.pos..];
     }
 
-    /// Peek at the major type of the next item
     pub fn peekMajorType(self: *Decoder) !MajorType {
         if (self.pos >= self.data.len) {
             return error.EndOfBuffer;
@@ -321,7 +270,6 @@ pub const Decoder = struct {
         return MajorType.fromByte(byte);
     }
 
-    /// Peek at the additional info of the next item
     pub fn peekAdditionalInfo(self: *Decoder) !u8 {
         if (self.pos >= self.data.len) {
             return error.EndOfBuffer;
@@ -329,7 +277,6 @@ pub const Decoder = struct {
         return self.data[self.pos] & 0x1F;
     }
 
-    /// Check if the next item is a break code
     pub fn isBreakCode(self: *Decoder) !bool {
         if (self.pos >= self.data.len) {
             return error.EndOfBuffer;
@@ -337,7 +284,6 @@ pub const Decoder = struct {
         return self.data[self.pos] == 0xFF;
     }
 
-    /// Read a break code
     pub fn readBreak(self: *Decoder) !void {
         if (self.pos >= self.data.len) {
             return error.EndOfBuffer;
@@ -351,7 +297,6 @@ pub const Decoder = struct {
         }
     }
 
-    /// Begin reading a fixed-length array
     pub fn beginArray(self: *Decoder) !usize {
         const major_type = try self.peekMajorType();
         if (major_type != .Array) {
@@ -363,13 +308,12 @@ pub const Decoder = struct {
 
         if (additional_info == AdditionalInfo.INDEFINITE) {
             self.indefinite_level += 1;
-            return std.math.maxInt(usize); // Indicate indefinite length
+            return std.math.maxInt(usize);
         }
 
         return try self.readAdditionalValue(additional_info);
     }
 
-    /// Begin reading an indefinite-length array
     pub fn beginArrayIndefinite(self: *Decoder) !void {
         const major_type = try self.peekMajorType();
         if (major_type != .Array) {
@@ -385,12 +329,10 @@ pub const Decoder = struct {
         self.indefinite_level += 1;
     }
 
-    /// End reading an array
     pub fn endArray(self: *Decoder) !void {
         try self.endContainer();
     }
 
-    /// Begin reading a fixed-length map
     pub fn beginMap(self: *Decoder) !usize {
         const major_type = try self.peekMajorType();
         if (major_type != .Map) {
@@ -402,13 +344,12 @@ pub const Decoder = struct {
 
         if (additional_info == AdditionalInfo.INDEFINITE) {
             self.indefinite_level += 1;
-            return std.math.maxInt(usize); // Indicate indefinite length
+            return std.math.maxInt(usize);
         }
 
         return try self.readAdditionalValue(additional_info);
     }
 
-    /// Begin reading an indefinite-length map
     pub fn beginMapIndefinite(self: *Decoder) !void {
         const major_type = try self.peekMajorType();
         if (major_type != .Map) {
@@ -424,19 +365,16 @@ pub const Decoder = struct {
         self.indefinite_level += 1;
     }
 
-    /// End reading a map
     pub fn endMap(self: *Decoder) !void {
         try self.endContainer();
     }
 
-    /// End reading a container (array or map)
     fn endContainer(self: *Decoder) !void {
         if (self.indefinite_level > 0) {
             try self.readBreak();
         }
     }
 
-    /// Helper function to read an additional value
     fn readAdditionalValue(self: *Decoder, additional_info: u8) !usize {
         if (additional_info <= AdditionalInfo.DIRECT) {
             return additional_info;
@@ -465,8 +403,6 @@ pub const Decoder = struct {
             if (self.pos + 7 >= self.data.len) {
                 return error.EndOfBuffer;
             }
-            // For simplicity, we'll just use the lower 32 bits for now
-            // since usize might not be 64 bits on all platforms
             const full_value = std.mem.readInt(u64, self.data[self.pos..][0..8], .big);
             self.pos += 8;
             return @intCast(full_value & 0xFFFFFFFF);
@@ -475,7 +411,6 @@ pub const Decoder = struct {
         }
     }
 
-    /// Read a tag
     pub fn readTag(self: *Decoder) !u64 {
         const major_type = try self.peekMajorType();
         if (major_type != .Tag) {
@@ -488,7 +423,6 @@ pub const Decoder = struct {
         return try self.readAdditionalValue(additional_info);
     }
 
-    /// Read a boolean value
     pub fn readBool(self: *Decoder) !bool {
         const major_type = try self.peekMajorType();
         if (major_type != .Simple) {
@@ -507,7 +441,6 @@ pub const Decoder = struct {
         }
     }
 
-    /// Read a null value
     pub fn readNull(self: *Decoder) !void {
         const major_type = try self.peekMajorType();
         if (major_type != .Simple) {
@@ -522,7 +455,6 @@ pub const Decoder = struct {
         }
     }
 
-    /// Read an undefined value
     pub fn readUndefined(self: *Decoder) !void {
         const major_type = try self.peekMajorType();
         if (major_type != .Simple) {
@@ -537,7 +469,6 @@ pub const Decoder = struct {
         }
     }
 
-    /// Read a floating-point value
     pub fn readFloat(self: *Decoder, comptime T: type) !T {
         const major_type = try self.peekMajorType();
         if (major_type != .Simple) {
@@ -609,7 +540,6 @@ pub const Decoder = struct {
         }
     }
 
-    /// Read an integer
     pub fn readInt(self: *Decoder, comptime T: type) !T {
         const major_type = try self.peekMajorType();
         if (major_type != .UnsignedInt and major_type != .NegativeInt) {
@@ -621,24 +551,18 @@ pub const Decoder = struct {
 
         const value = try self.readAdditionalValue(additional_info);
 
-        // Handle signed and unsigned types
         if (major_type == .NegativeInt) {
-            // For signed types
             if (T == i8 or T == i16 or T == i32 or T == i64 or T == i128 or T == isize) {
-                // Convert to negative
                 const neg_value = @as(i64, -1) - @as(i64, @intCast(value));
                 return @as(T, @intCast(neg_value));
             } else {
-                // For unsigned types, we can't represent negative values
                 return error.NegativeValueInUnsignedType;
             }
         } else {
-            // For positive values, just return the value
             return @as(T, @intCast(value));
         }
     }
 
-    /// Read a byte string
     pub fn readBytes(self: *Decoder, allocator: Allocator) ![]u8 {
         const major_type = try self.peekMajorType();
         if (major_type != .ByteString) {
@@ -649,10 +573,8 @@ pub const Decoder = struct {
         self.pos += 1;
 
         if (additional_info == AdditionalInfo.INDEFINITE) {
-            // Indefinite-length byte string
             self.indefinite_level += 1;
 
-            // For simplicity, we'll just concatenate all chunks
             var result = std.ArrayList(u8){};
             errdefer result.deinit(allocator);
 
@@ -670,7 +592,6 @@ pub const Decoder = struct {
 
             return result.toOwnedSlice(allocator);
         } else {
-            // Fixed-length byte string
             const len = try self.readAdditionalValue(additional_info);
 
             if (self.pos + len > self.data.len) {
@@ -683,7 +604,6 @@ pub const Decoder = struct {
         }
     }
 
-    /// Read a text string
     pub fn readText(self: *Decoder, allocator: Allocator) ![]u8 {
         const major_type = try self.peekMajorType();
         if (major_type != .TextString) {
@@ -694,10 +614,8 @@ pub const Decoder = struct {
         self.pos += 1;
 
         if (additional_info == AdditionalInfo.INDEFINITE) {
-            // Indefinite-length text string
             self.indefinite_level += 1;
 
-            // For simplicity, we'll just concatenate all chunks
             var result = std.ArrayList(u8){};
             errdefer result.deinit(allocator);
 
@@ -715,7 +633,6 @@ pub const Decoder = struct {
 
             return result.toOwnedSlice(allocator);
         } else {
-            // Fixed-length text string
             const len = try self.readAdditionalValue(additional_info);
 
             if (self.pos + len > self.data.len) {
@@ -728,7 +645,6 @@ pub const Decoder = struct {
         }
     }
 
-    /// Skip the next item
     pub fn skip(self: *Decoder) !void {
         const major_type = try self.peekMajorType();
         const additional_info = try self.peekAdditionalInfo();
@@ -736,14 +652,12 @@ pub const Decoder = struct {
 
         switch (major_type) {
             .UnsignedInt, .NegativeInt => {
-                // Skip the value part of the integer
                 if (additional_info > AdditionalInfo.DIRECT) {
                     _ = try self.readAdditionalValue(additional_info);
                 }
             },
             .ByteString, .TextString => {
                 if (additional_info == AdditionalInfo.INDEFINITE) {
-                    // Indefinite-length string
                     self.indefinite_level += 1;
 
                     while (true) {
@@ -752,10 +666,9 @@ pub const Decoder = struct {
                             break;
                         }
 
-                        try self.skip(); // Skip each chunk
+                        try self.skip();
                     }
                 } else {
-                    // Fixed-length string
                     const len = try self.readAdditionalValue(additional_info);
 
                     if (self.pos + len > self.data.len) {
@@ -767,7 +680,6 @@ pub const Decoder = struct {
             },
             .Array => {
                 if (additional_info == AdditionalInfo.INDEFINITE) {
-                    // Indefinite-length array
                     self.indefinite_level += 1;
 
                     while (true) {
@@ -776,20 +688,18 @@ pub const Decoder = struct {
                             break;
                         }
 
-                        try self.skip(); // Skip each item
+                        try self.skip();
                     }
                 } else {
-                    // Fixed-length array
                     const len = try self.readAdditionalValue(additional_info);
 
                     for (0..len) |_| {
-                        try self.skip(); // Skip each item
+                        try self.skip();
                     }
                 }
             },
             .Map => {
                 if (additional_info == AdditionalInfo.INDEFINITE) {
-                    // Indefinite-length map
                     self.indefinite_level += 1;
 
                     while (true) {
@@ -798,24 +708,22 @@ pub const Decoder = struct {
                             break;
                         }
 
-                        try self.skip(); // Skip key
-                        try self.skip(); // Skip value
+                        try self.skip();
+                        try self.skip();
                     }
                 } else {
-                    // Fixed-length map
                     const len = try self.readAdditionalValue(additional_info);
 
                     for (0..len) |_| {
-                        try self.skip(); // Skip key
-                        try self.skip(); // Skip value
+                        try self.skip();
+                        try self.skip();
                     }
                 }
             },
             .Tag => {
-                try self.skip(); // Skip the tagged value
+                try self.skip();
             },
             .Simple => {
-                // Skip the value part of the simple value
                 if (additional_info == AdditionalInfo.ONE_BYTE) {
                     self.pos += 1;
                 } else if (additional_info == AdditionalInfo.TWO_BYTES) {
@@ -825,7 +733,6 @@ pub const Decoder = struct {
                 } else if (additional_info == AdditionalInfo.EIGHT_BYTES) {
                     self.pos += 8;
                 }
-                // For simple values with additional info <= 23, there's nothing to skip
             },
         }
     }

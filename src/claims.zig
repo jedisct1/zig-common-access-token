@@ -9,33 +9,31 @@ const Error = @import("error.zig").Error;
 const zbor = @import("zbor.zig");
 const util = @import("util.zig");
 
-// Standard CWT claim labels
-pub const LABEL_ISS: u64 = 1; // Issuer
-pub const LABEL_SUB: u64 = 2; // Subject
-pub const LABEL_AUD: u64 = 3; // Audience
-pub const LABEL_EXP: u64 = 4; // Expiration Time
-pub const LABEL_NBF: u64 = 5; // Not Before
-pub const LABEL_IAT: u64 = 6; // Issued At
-pub const LABEL_CTI: u64 = 7; // CWT ID
-pub const LABEL_CNF: u64 = 8; // Confirmation
+pub const LABEL_ISS: u64 = 1;
+pub const LABEL_SUB: u64 = 2;
+pub const LABEL_AUD: u64 = 3;
+pub const LABEL_EXP: u64 = 4;
+pub const LABEL_NBF: u64 = 5;
+pub const LABEL_IAT: u64 = 6;
+pub const LABEL_CTI: u64 = 7;
+pub const LABEL_CNF: u64 = 8;
 
-// CAT-specific claim labels
-pub const LABEL_GEOHASH: u64 = 282; // Geohash
-pub const LABEL_CATREPLAY: u64 = 308; // Replay protection
-pub const LABEL_CATPOR: u64 = 309; // Proof of possession
-pub const LABEL_CATV: u64 = 310; // CAT version
-pub const LABEL_CATNIP: u64 = 311; // Network IP
-pub const LABEL_CATU: u64 = 312; // URI
-pub const LABEL_CATM: u64 = 313; // Methods
-pub const LABEL_CATALPN: u64 = 314; // ALPN
-pub const LABEL_CATH: u64 = 315; // Headers
-pub const LABEL_CATGEOISO3166: u64 = 316; // Geo ISO 3166
-pub const LABEL_CATGEOCOORD: u64 = 317; // Geo coordinates
-pub const LABEL_CATTPK: u64 = 319; // TPK
-pub const LABEL_CATIFDATA: u64 = 320; // IF data
-pub const LABEL_CATADPOP: u64 = 321; // AD POP
-pub const LABEL_CATIF: u64 = 322; // IF
-pub const LABEL_CATR: u64 = 323; // Renewal
+pub const LABEL_GEOHASH: u64 = 282;
+pub const LABEL_CATREPLAY: u64 = 308;
+pub const LABEL_CATPOR: u64 = 309;
+pub const LABEL_CATV: u64 = 310;
+pub const LABEL_CATNIP: u64 = 311;
+pub const LABEL_CATU: u64 = 312;
+pub const LABEL_CATM: u64 = 313;
+pub const LABEL_CATALPN: u64 = 314;
+pub const LABEL_CATH: u64 = 315;
+pub const LABEL_CATGEOISO3166: u64 = 316;
+pub const LABEL_CATGEOCOORD: u64 = 317;
+pub const LABEL_CATTPK: u64 = 319;
+pub const LABEL_CATIFDATA: u64 = 320;
+pub const LABEL_CATADPOP: u64 = 321;
+pub const LABEL_CATIF: u64 = 322;
+pub const LABEL_CATR: u64 = 323;
 
 /// Represents a value that can be stored in a claim.
 ///
@@ -146,13 +144,11 @@ pub const Claims = struct {
         self.claims.deinit();
     }
 
-    /// Helper to set a string claim
     fn setStringClaim(self: *Claims, label: u64, value: []const u8) !void {
         const dup = try self.allocator.dupe(u8, value);
         try self.claims.put(label, ClaimValue{ .String = dup });
     }
 
-    /// Helper to get a string claim
     fn getStringClaim(self: Claims, label: u64) ?[]const u8 {
         return if (self.claims.get(label)) |value| switch (value) {
             .String => |str| str,
@@ -160,12 +156,10 @@ pub const Claims = struct {
         } else null;
     }
 
-    /// Helper to set an integer claim
     fn setIntClaim(self: *Claims, label: u64, value: i64) !void {
         try self.claims.put(label, ClaimValue{ .Integer = value });
     }
 
-    /// Helper to get an integer claim
     fn getIntClaim(self: Claims, label: u64) ?i64 {
         return if (self.claims.get(label)) |value| switch (value) {
             .Integer => |int| int,
@@ -233,13 +227,11 @@ pub const Claims = struct {
         return self.getIntClaim(LABEL_IAT);
     }
 
-    /// Helper to set a bytes claim
     fn setBytesClaim(self: *Claims, label: u64, value: []const u8) !void {
         const dup = try self.allocator.dupe(u8, value);
         try self.claims.put(label, ClaimValue{ .Bytes = dup });
     }
 
-    /// Helper to get a bytes claim
     fn getBytesClaim(self: Claims, label: u64) ?[]const u8 {
         return if (self.claims.get(label)) |value| switch (value) {
             .Bytes => |bytes| bytes,
@@ -269,7 +261,6 @@ pub const Claims = struct {
 
     /// Sets a generic claim
     pub fn setClaim(self: *Claims, label: u64, value: ClaimValue) !void {
-        // Free the old value if it exists to prevent memory leaks
         if (self.claims.getPtr(label)) |old_value| {
             var old_val = old_value.*;
             old_val.deinit(self.allocator);
@@ -277,9 +268,8 @@ pub const Claims = struct {
         try self.claims.put(label, try value.clone(self.allocator));
     }
 
-    /// Sets a generic claim taking ownership without cloning
+    /// Takes ownership of the value without cloning
     fn setClaimOwned(self: *Claims, label: u64, value: ClaimValue) !void {
-        // Free the old value if it exists to prevent memory leaks
         if (self.claims.getPtr(label)) |old_value| {
             var old_val = old_value.*;
             old_val.deinit(self.allocator);
@@ -292,7 +282,6 @@ pub const Claims = struct {
         return self.claims.get(label);
     }
 
-    /// Helper function to recursively encode a ClaimValue
     fn encodeClaimValue(encoder: *zbor.Encoder, value: ClaimValue) !void {
         switch (value) {
             .String => |str| try encoder.pushText(str),
@@ -325,26 +314,18 @@ pub const Claims = struct {
         var encoder = zbor.Encoder.init(allocator);
         defer encoder.deinit();
 
-        // Start a map with the number of claims
         try encoder.beginMap(@intCast(self.claims.count()));
 
-        // Add each claim to the map
         var it = self.claims.iterator();
         while (it.next()) |entry| {
             const label = entry.key_ptr.*;
             const value = entry.value_ptr.*;
 
-            // Add the label as an unsigned integer
             try encoder.pushInt(label);
-
-            // Add the value using the recursive helper
             try encodeClaimValue(&encoder, value);
         }
 
-        // End the map
         try encoder.endMap();
-
-        // Get the encoded CBOR and duplicate for caller ownership
         return allocator.dupe(u8, encoder.finish());
     }
 
@@ -356,16 +337,11 @@ pub const Claims = struct {
         var decoder = zbor.Decoder.init(cbor_data, allocator);
         defer decoder.deinit();
 
-        // Expect a map
         const map_len = try decoder.beginMap();
 
-        // Read each claim from the map
         var i: usize = 0;
         while (i < map_len) : (i += 1) {
-            // Read the label
             const label = try decoder.readInt(u64);
-
-            // Read the value based on its type
             const major_type = try decoder.peekMajorType();
 
             switch (major_type) {

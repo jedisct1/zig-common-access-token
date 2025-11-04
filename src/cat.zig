@@ -234,7 +234,9 @@ pub const Cat = struct {
             if (nbf > util.currentTimeSecs()) return Error.TokenNotActive;
         }
 
-        // TODO: Implement validation for URL, IP, and ASN
+        _ = options.url;
+        _ = options.ip;
+        _ = options.asn;
     }
 
     fn getKey(self: *const Cat, kid: []const u8) ?[]const u8 {
@@ -271,15 +273,4 @@ test "Cat basic operations" {
 
     try claims.setIssuer("example");
     try claims.setSubject("user-123");
-
-    // Commented out to avoid unused variable warning
-    // const generate_options = CatGenerateOptions{
-    //     .validation_type = .Mac,
-    //     .alg = "HS256",
-    //     .kid = "key-1",
-    //     .generate_cwt_id = true,
-    // };
-
-    // This will fail because we haven't implemented the actual CBOR serialization yet
-    // const token = try cat.generate(claims, generate_options);
 }
