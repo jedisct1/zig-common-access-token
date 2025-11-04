@@ -145,6 +145,9 @@ pub fn main() !void {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
+    // The token to validate (e.g., from a client request)
+    const token = "2D3RhEOhAQWhBExTeW1tZXRyaWMyNTZYS6YHWCA1YmJjNDI2NWVmYTAxOGI4YjU4Y2I5OTQyY2IwODFmMQFnZXhhbXBsZQQaaQpK1gYaaQpKXgJndXNlcjEyMwNnc2VydmljZVggNRE3wudeG0Fd-vJMZiLpNRO6WU9lrtByioSvzuAEi7U";
+
     // Create a key for token validation
     const key_hex = "403697de87af64611c1d32a05dab0fe1fcb715a86ab435f1ec99192d79569388";
     const key = try cat.util.hexToBytes(allocator, key_hex);
@@ -173,6 +176,12 @@ pub fn main() !void {
     defer claims.deinit();
 
     std.debug.print("Token is valid!\n", .{});
+    if (claims.getIssuer()) |issuer| {
+        std.debug.print("Issuer: {s}\n", .{issuer});
+    }
+    if (claims.getSubject()) |subject| {
+        std.debug.print("Subject: {s}\n", .{subject});
+    }
 }
 ```
 
@@ -182,8 +191,9 @@ The library includes several ready-to-use examples in the `examples/` directory:
 
 - generate.zig: Demonstrates basic token generation with standard claims
 - validate.zig: Shows how to validate tokens and extract claims
-- interop.zig: Tests interoperability with the NodeJS implementation
+- interop.zig: Tests interoperability with the NodeJS implementation (node-cat)
 - cat_claims.zig: Demonstrates using CAT-specific claims for advanced use cases
+- minimal.zig: Simple example showing basic base64 encoding utilities
 
 To run an example:
 
@@ -199,6 +209,9 @@ zig build interop [-- <token>]
 
 # Use CAT-specific claims
 zig build cat_claims
+
+# Run minimal example
+zig build minimal
 ```
 
 ## Security Considerations
