@@ -173,13 +173,16 @@ pub const Cat = struct {
         try cose_mac0.createTag(key);
 
         var cose_mac0_cbor = ArrayList(u8){};
+        defer cose_mac0_cbor.deinit(temp_allocator);
         try cose_mac0.toCbor(&cose_mac0_cbor);
 
         if (self.expect_cwt_tag) {
             var result = ArrayList(u8){};
+            defer result.deinit(temp_allocator);
             try self.serializeTaggedCbor(temp_allocator, TAG_COSE_MAC0, cose_mac0_cbor.items, &result);
 
             var tagged_cose_mac0_cbor = ArrayList(u8){};
+            defer tagged_cose_mac0_cbor.deinit(temp_allocator);
             try self.serializeTaggedCbor(temp_allocator, TAG_CWT, result.items, &tagged_cose_mac0_cbor);
 
             return try util.toBase64NoPadding(self.allocator, tagged_cose_mac0_cbor.items);
