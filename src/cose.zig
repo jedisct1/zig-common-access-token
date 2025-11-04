@@ -188,8 +188,15 @@ fn serializeCbor(
         // Add the key as an integer
         try encoder.pushInt(key);
 
-        // Add the value as a byte string
-        try encoder.pushBytes(value);
+        // Special handling for algorithm header - must be integer
+        if (key == HEADER_ALG) {
+            // Parse the value as an integer
+            const alg_int = try std.fmt.parseInt(i64, value, 10);
+            try encoder.pushInt(alg_int);
+        } else {
+            // Add the value as a byte string
+            try encoder.pushBytes(value);
+        }
     }
 
     // End the map
@@ -259,13 +266,9 @@ fn serializeCoseMac0(
     // Protected
     try encoder.pushBytes(protected);
 
-    // Unprotected
-    // Parse the unprotected header from CBOR
-    var decoder = zbor.Decoder.init(unprotected, allocator);
-    defer decoder.deinit();
-
-    // Copy the unprotected header to the output
-    try encoder.pushBytes(unprotected);
+    // Unprotected (must be a direct map, not wrapped in bytes)
+    // Push the raw CBOR-encoded map directly
+    try encoder.pushRaw(unprotected);
 
     // Payload
     try encoder.pushBytes(payload);
