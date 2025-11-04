@@ -13,40 +13,40 @@ CAT is built on established standards:
 
 ## Overview
 
-This library provides a complete implementation for generating and validating Common Access Tokens (CAT) using HMAC signatures. It is designed to be interoperable with other implementations like [node-cat](https://github.com/Eyevinn/node-cat) and [common-access-token](https://github.com/jedisct1/rust-common-access-token).
+This library provides a complete implementation for generating and validating Common Access Tokens (CAT) using HMAC signatures. It is designed to be interoperable with other implementations like [node-cat](https://github.com/Eyevinn/node-cat) and [common-access-token](https://github.com/fastly/rust-cat).
 
 Key benefits of using CAT tokens:
-- **Compact**: Binary format results in smaller token sizes compared to text-based formats
-- **Efficient**: CBOR encoding/decoding is faster and requires less processing power
-- **Secure**: Built on established cryptographic standards
-- **Extensible**: Supports custom claims and extensions
+- Compact: Binary format results in smaller token sizes compared to text-based formats
+- Efficient: CBOR encoding/decoding is faster and requires less processing power
+- Secure: Built on established cryptographic standards
+- Extensible: Supports custom claims and extensions
 
 ## Features
 
-- **Token Operations**:
+- Token Operations:
   - Generate CAT tokens with HMAC signatures (HS256)
   - Validate CAT tokens with comprehensive security checks
   - Support for token expiration and time-based validation
 
-- **Claims Support**:
+- Claims Support:
   - Standard CWT claims (issuer, subject, audience, expiration, etc.)
   - CAT-specific claims (version, renewal, usage, data, authorization)
   - Custom claim extension capability
 
-- **CBOR Implementation**:
+- CBOR Implementation:
   - High-performance CBOR encoding/decoding
   - Support for all CBOR data types
   - Support for indefinite-length arrays, maps, and strings
   - Support for floating-point numbers
   - Support for tagged values
 
-- **Error Handling**:
+- Error Handling:
   - Comprehensive error types
   - Detailed error messages
   - Error context information
   - Error recovery mechanisms
 
-- **Integration**:
+- Integration:
   - Interoperability with other CAT implementations
   - Easy integration with Zig applications
   - Comprehensive documentation and examples
@@ -180,10 +180,10 @@ pub fn main() !void {
 
 The library includes several ready-to-use examples in the `examples/` directory:
 
-- **generate.zig**: Demonstrates basic token generation with standard claims
-- **validate.zig**: Shows how to validate tokens and extract claims
-- **interop.zig**: Tests interoperability with the NodeJS implementation
-- **cat_claims.zig**: Demonstrates using CAT-specific claims for advanced use cases
+- generate.zig: Demonstrates basic token generation with standard claims
+- validate.zig: Shows how to validate tokens and extract claims
+- interop.zig: Tests interoperability with the NodeJS implementation
+- cat_claims.zig: Demonstrates using CAT-specific claims for advanced use cases
 
 To run an example:
 
@@ -205,21 +205,21 @@ zig build cat_claims
 
 When using CAT tokens in your applications, keep these security best practices in mind:
 
-1. **Key Management**:
+1. Key Management:
    - Store signing keys securely
    - Rotate keys periodically
    - Use different keys for different environments
 
-2. **Token Validation**:
+2. Token Validation:
    - Always validate tokens before trusting their contents
    - Check expiration times
    - Verify the issuer and audience claims
 
-3. **Token Lifetime**:
+3. Token Lifetime:
    - Use short-lived tokens when possible
    - For longer sessions, consider refresh token patterns
 
-4. **Claims**:
+4. Claims:
    - Only include necessary information in tokens
    - Be cautious with sensitive data in claims
 
@@ -227,8 +227,8 @@ When using CAT tokens in your applications, keep these security best practices i
 
 This library is designed to be interoperable with other CAT implementations:
 
-- **[node-cat](https://github.com/Eyevinn/node-cat)**: The NodeJS reference implementation
-- **[common-access-token](https://github.com/jedisct1/rust-common-access-token)**: The Rust implementation
+- [node-cat](https://github.com/Eyevinn/node-cat): The NodeJS reference implementation
+- [common-access-token](https://github.com/fastly/rust-cat): The Rust implementation
 - Other implementations that follow the CAT specification
 
 ## License
