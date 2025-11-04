@@ -314,6 +314,34 @@ pub const Claims = struct {
         return self.claims.get(label);
     }
 
+    /// Helper function to recursively encode a ClaimValue
+    fn encodeClaimValue(encoder: *zbor.Encoder, value: ClaimValue) !void {
+        switch (value) {
+            .String => |str| try encoder.pushText(str),
+            .Integer => |int| try encoder.pushInt(int),
+            .Bytes => |bytes| try encoder.pushBytes(bytes),
+            .Array => |array| {
+                try encoder.beginArray(@intCast(array.items.len));
+                for (array.items) |item| {
+                    try encodeClaimValue(encoder, item);
+                }
+                try encoder.endArray();
+            },
+            .Map => |map| {
+                try encoder.beginMap(@intCast(map.count()));
+                var map_it = map.iterator();
+                while (map_it.next()) |map_entry| {
+                    const map_label = map_entry.key_ptr.*;
+                    const map_value = map_entry.value_ptr.*;
+
+                    try encoder.pushInt(map_label);
+                    try encodeClaimValue(encoder, map_value);
+                }
+                try encoder.endMap();
+            },
+        }
+    }
+
     /// Serializes the claims to CBOR
     pub fn toCbor(self: Claims, allocator: Allocator) ![]u8 {
         var encoder = zbor.Encoder.init(allocator);
@@ -331,42 +359,8 @@ pub const Claims = struct {
             // Add the label as an unsigned integer
             try encoder.pushInt(label);
 
-            // Add the value based on its type
-            switch (value) {
-                .String => |str| try encoder.pushText(str),
-                .Integer => |int| try encoder.pushInt(int),
-                .Bytes => |bytes| try encoder.pushBytes(bytes),
-                .Array => |array| {
-                    try encoder.beginArray(@intCast(array.items.len));
-                    for (array.items) |item| {
-                        switch (item) {
-                            .String => |str| try encoder.pushText(str),
-                            .Integer => |int| try encoder.pushInt(int),
-                            .Bytes => |bytes| try encoder.pushBytes(bytes),
-                            else => return Error.CborEncodingError,
-                        }
-                    }
-                    try encoder.endArray();
-                },
-                .Map => |map| {
-                    try encoder.beginMap(@intCast(map.count()));
-                    var map_it = map.iterator();
-                    while (map_it.next()) |map_entry| {
-                        const map_label = map_entry.key_ptr.*;
-                        const map_value = map_entry.value_ptr.*;
-
-                        try encoder.pushInt(map_label);
-
-                        switch (map_value) {
-                            .String => |str| try encoder.pushText(str),
-                            .Integer => |int| try encoder.pushInt(int),
-                            .Bytes => |bytes| try encoder.pushBytes(bytes),
-                            else => return Error.CborEncodingError,
-                        }
-                    }
-                    try encoder.endMap();
-                },
-            }
+            // Add the value using the recursive helper
+            try encodeClaimValue(&encoder, value);
         }
 
         // End the map
