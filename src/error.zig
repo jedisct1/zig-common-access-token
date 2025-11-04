@@ -74,25 +74,6 @@ pub const Error = error{
     Unexpected,
 };
 
-/// Error context for providing more detailed error information
-pub const ErrorContext = struct {
-    /// The error that occurred
-    error_type: Error,
-    /// Additional context about the error
-    message: []const u8,
-    /// The source of the error (e.g., function name)
-    source: []const u8,
-
-    /// Create a new error context
-    pub fn init(error_type: Error, message: []const u8, source: []const u8) ErrorContext {
-        return .{
-            .error_type = error_type,
-            .message = message,
-            .source = source,
-        };
-    }
-};
-
 /// Converts an error to a human-readable string.
 pub fn errorToString(err: Error) []const u8 {
     return switch (err) {
@@ -164,11 +145,6 @@ pub fn errorToString(err: Error) []const u8 {
         Error.InternalError => "Internal error",
         Error.Unexpected => "Unexpected error",
     };
-}
-
-/// Format an error context as a string
-pub fn formatErrorContext(context: ErrorContext, allocator: std.mem.Allocator) ![]const u8 {
-    return std.fmt.allocPrint(allocator, "Error: {s}\nMessage: {s}\nSource: {s}", .{ errorToString(context.error_type), context.message, context.source });
 }
 
 test "error to string" {

@@ -98,9 +98,13 @@ pub const Encoder = struct {
         self.indefinite_level += 1;
     }
 
-    /// End a CBOR array
+    /// End a CBOR array (only needed for indefinite-length arrays)
     pub fn endArray(self: *Encoder) !void {
-        // Only needed for indefinite-length arrays
+        try self.endContainer();
+    }
+
+    /// End a CBOR container (array or map)
+    fn endContainer(self: *Encoder) !void {
         if (self.indefinite_level > 0) {
             try self.buffer.append(self.allocator, 0xFF); // Break code
             self.indefinite_level -= 1;
@@ -118,13 +122,9 @@ pub const Encoder = struct {
         self.indefinite_level += 1;
     }
 
-    /// End a CBOR map
+    /// End a CBOR map (only needed for indefinite-length maps)
     pub fn endMap(self: *Encoder) !void {
-        // Only needed for indefinite-length maps
-        if (self.indefinite_level > 0) {
-            try self.buffer.append(self.allocator, 0xFF); // Break code
-            self.indefinite_level -= 1;
-        }
+        try self.endContainer();
     }
 
     /// Helper function to write a type and value
@@ -164,23 +164,11 @@ pub const Encoder = struct {
 
     /// Push an integer
     pub fn pushInt(self: *Encoder, value: anytype) !void {
-        const T = @TypeOf(value);
-
         if (value >= 0) {
-            // Unsigned integer or positive signed integer
             try self.writeTypeAndValue(MajorType.UnsignedInt, value);
         } else {
-            // Negative integer
-            // For negative integers, CBOR uses -1 - n (where n is the negative value)
-            // So we need to convert to the absolute value of value + 1
-            const abs_value = if (T == i8 or T == i16 or T == i32 or T == i64 or T == i128 or T == isize)
-                if (value == std.math.minInt(T))
-                    @as(u64, @intCast(-(value + 1)))
-                else
-                    @as(u64, @intCast(-(value + 1)))
-            else
-                @compileError("Unsupported type for pushInt");
-
+            // For negative integers, CBOR uses -1 - n encoding
+            const abs_value = @as(u64, @intCast(-(value + 1)));
             try self.writeTypeAndValue(MajorType.NegativeInt, abs_value);
         }
     }
@@ -235,8 +223,7 @@ pub const Encoder = struct {
 
     /// Push an indefinite-length byte string
     pub fn pushBytesIndefinite(self: *Encoder) !void {
-        try self.buffer.append(self.allocator, MajorType.ByteString.toByte() | AdditionalInfo.INDEFINITE);
-        self.indefinite_level += 1;
+        try self.pushIndefiniteString(MajorType.ByteString);
     }
 
     /// Push a text string
@@ -247,7 +234,12 @@ pub const Encoder = struct {
 
     /// Push an indefinite-length text string
     pub fn pushTextIndefinite(self: *Encoder) !void {
-        try self.buffer.append(self.allocator, MajorType.TextString.toByte() | AdditionalInfo.INDEFINITE);
+        try self.pushIndefiniteString(MajorType.TextString);
+    }
+
+    /// Helper to push an indefinite-length string (byte or text)
+    fn pushIndefiniteString(self: *Encoder, major_type: MajorType) !void {
+        try self.buffer.append(self.allocator, major_type.toByte() | AdditionalInfo.INDEFINITE);
         self.indefinite_level += 1;
     }
 
@@ -397,10 +389,7 @@ pub const Decoder = struct {
 
     /// End reading an array
     pub fn endArray(self: *Decoder) !void {
-        // Only needed for indefinite-length arrays
-        if (self.indefinite_level > 0) {
-            try self.readBreak();
-        }
+        try self.endContainer();
     }
 
     /// Begin reading a fixed-length map
@@ -439,7 +428,11 @@ pub const Decoder = struct {
 
     /// End reading a map
     pub fn endMap(self: *Decoder) !void {
-        // Only needed for indefinite-length maps
+        try self.endContainer();
+    }
+
+    /// End reading a container (array or map)
+    fn endContainer(self: *Decoder) !void {
         if (self.indefinite_level > 0) {
             try self.readBreak();
         }

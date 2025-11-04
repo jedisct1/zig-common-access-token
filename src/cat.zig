@@ -167,8 +167,7 @@ pub const Cat = struct {
         const key = self.getKey(kid) orelse return Error.KeyNotFound;
 
         // Serialize the claims to CBOR
-        var claims_cbor = ArrayList(u8){};
-        try self.serializeClaims(temp_allocator, claims, &claims_cbor);
+        const claims_cbor = try claims.toCbor(temp_allocator);
 
         // Create the protected header
         var protected_header = AutoHashMap(i64, []const u8).init(temp_allocator);
@@ -184,7 +183,7 @@ pub const Cat = struct {
             temp_allocator,
             protected_header,
             unprotected_header,
-            claims_cbor.items,
+            claims_cbor,
         );
 
         try cose_mac0.createTag(key);
@@ -315,17 +314,7 @@ pub const Cat = struct {
 
     /// Gets a key by its ID.
     fn getKey(self: *const Cat, kid: []const u8) ?[]const u8 {
-        // Use the key ID directly
         return self.keys.get(kid);
-    }
-
-    /// Serializes claims to CBOR.
-    fn serializeClaims(_: *const Cat, allocator: Allocator, claims: Claims, out: *ArrayList(u8)) !void {
-        // Use the Claims.toCbor method to serialize the claims
-        const cbor_data = try claims.toCbor(claims.allocator);
-
-        // Append the serialized claims to the output
-        try out.appendSlice(allocator, cbor_data);
     }
 
     /// Serializes a tagged CBOR value.
@@ -333,17 +322,10 @@ pub const Cat = struct {
         var encoder = zbor.Encoder.init(allocator);
         defer encoder.deinit();
 
-        // Create a tagged value
         try encoder.pushTag(tag);
-
-        // Copy the data as is (it's already CBOR-encoded)
         try encoder.pushRaw(data);
 
-        // Get the encoded CBOR
-        const cbor_data = encoder.finish();
-
-        // Append the encoded CBOR to the output
-        try out.appendSlice(allocator, cbor_data);
+        try out.appendSlice(allocator, encoder.finish());
     }
 };
 

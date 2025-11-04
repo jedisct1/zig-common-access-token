@@ -146,136 +146,125 @@ pub const Claims = struct {
         self.claims.deinit();
     }
 
+    /// Helper to set a string claim
+    fn setStringClaim(self: *Claims, label: u64, value: []const u8) !void {
+        const dup = try self.allocator.dupe(u8, value);
+        try self.claims.put(label, ClaimValue{ .String = dup });
+    }
+
+    /// Helper to get a string claim
+    fn getStringClaim(self: Claims, label: u64) ?[]const u8 {
+        return if (self.claims.get(label)) |value| switch (value) {
+            .String => |str| str,
+            else => null,
+        } else null;
+    }
+
+    /// Helper to set an integer claim
+    fn setIntClaim(self: *Claims, label: u64, value: i64) !void {
+        try self.claims.put(label, ClaimValue{ .Integer = value });
+    }
+
+    /// Helper to get an integer claim
+    fn getIntClaim(self: Claims, label: u64) ?i64 {
+        return if (self.claims.get(label)) |value| switch (value) {
+            .Integer => |int| int,
+            else => null,
+        } else null;
+    }
+
     /// Sets the issuer claim
     pub fn setIssuer(self: *Claims, issuer: []const u8) !void {
-        const dup_issuer = try self.allocator.dupe(u8, issuer);
-        try self.claims.put(LABEL_ISS, ClaimValue{ .String = dup_issuer });
+        try self.setStringClaim(LABEL_ISS, issuer);
     }
 
     /// Gets the issuer claim
     pub fn getIssuer(self: Claims) ?[]const u8 {
-        if (self.claims.get(LABEL_ISS)) |value| {
-            return switch (value) {
-                .String => |str| str,
-                else => null,
-            };
-        }
-        return null;
+        return self.getStringClaim(LABEL_ISS);
     }
 
     /// Sets the subject claim
     pub fn setSubject(self: *Claims, subject: []const u8) !void {
-        const dup_subject = try self.allocator.dupe(u8, subject);
-        try self.claims.put(LABEL_SUB, ClaimValue{ .String = dup_subject });
+        try self.setStringClaim(LABEL_SUB, subject);
     }
 
     /// Gets the subject claim
     pub fn getSubject(self: Claims) ?[]const u8 {
-        if (self.claims.get(LABEL_SUB)) |value| {
-            return switch (value) {
-                .String => |str| str,
-                else => null,
-            };
-        }
-        return null;
+        return self.getStringClaim(LABEL_SUB);
     }
 
     /// Sets the audience claim
     pub fn setAudience(self: *Claims, audience: []const u8) !void {
-        const dup_audience = try self.allocator.dupe(u8, audience);
-        try self.claims.put(LABEL_AUD, ClaimValue{ .String = dup_audience });
+        try self.setStringClaim(LABEL_AUD, audience);
     }
 
     /// Gets the audience claim
     pub fn getAudience(self: Claims) ?[]const u8 {
-        if (self.claims.get(LABEL_AUD)) |value| {
-            return switch (value) {
-                .String => |str| str,
-                else => null,
-            };
-        }
-        return null;
+        return self.getStringClaim(LABEL_AUD);
     }
 
     /// Sets the expiration time claim
     pub fn setExpiration(self: *Claims, exp: i64) !void {
-        try self.claims.put(LABEL_EXP, ClaimValue{ .Integer = exp });
+        try self.setIntClaim(LABEL_EXP, exp);
     }
 
     /// Gets the expiration time claim
     pub fn getExpiration(self: Claims) ?i64 {
-        if (self.claims.get(LABEL_EXP)) |value| {
-            return switch (value) {
-                .Integer => |int| int,
-                else => null,
-            };
-        }
-        return null;
+        return self.getIntClaim(LABEL_EXP);
     }
 
     /// Sets the not before claim
     pub fn setNotBefore(self: *Claims, nbf: i64) !void {
-        try self.claims.put(LABEL_NBF, ClaimValue{ .Integer = nbf });
+        try self.setIntClaim(LABEL_NBF, nbf);
     }
 
     /// Gets the not before claim
     pub fn getNotBefore(self: Claims) ?i64 {
-        if (self.claims.get(LABEL_NBF)) |value| {
-            return switch (value) {
-                .Integer => |int| int,
-                else => null,
-            };
-        }
-        return null;
+        return self.getIntClaim(LABEL_NBF);
     }
 
     /// Sets the issued at claim
     pub fn setIssuedAt(self: *Claims, iat: i64) !void {
-        try self.claims.put(LABEL_IAT, ClaimValue{ .Integer = iat });
+        try self.setIntClaim(LABEL_IAT, iat);
     }
 
     /// Gets the issued at claim
     pub fn getIssuedAt(self: Claims) ?i64 {
-        if (self.claims.get(LABEL_IAT)) |value| {
-            return switch (value) {
-                .Integer => |int| int,
-                else => null,
-            };
-        }
-        return null;
+        return self.getIntClaim(LABEL_IAT);
+    }
+
+    /// Helper to set a bytes claim
+    fn setBytesClaim(self: *Claims, label: u64, value: []const u8) !void {
+        const dup = try self.allocator.dupe(u8, value);
+        try self.claims.put(label, ClaimValue{ .Bytes = dup });
+    }
+
+    /// Helper to get a bytes claim
+    fn getBytesClaim(self: Claims, label: u64) ?[]const u8 {
+        return if (self.claims.get(label)) |value| switch (value) {
+            .Bytes => |bytes| bytes,
+            else => null,
+        } else null;
     }
 
     /// Sets the CWT ID claim
     pub fn setCwtId(self: *Claims, cti: []const u8) !void {
-        const dup_cti = try self.allocator.dupe(u8, cti);
-        try self.claims.put(LABEL_CTI, ClaimValue{ .Bytes = dup_cti });
+        try self.setBytesClaim(LABEL_CTI, cti);
     }
 
     /// Gets the CWT ID claim
     pub fn getCwtId(self: Claims) ?[]const u8 {
-        if (self.claims.get(LABEL_CTI)) |value| {
-            return switch (value) {
-                .Bytes => |bytes| bytes,
-                else => null,
-            };
-        }
-        return null;
+        return self.getBytesClaim(LABEL_CTI);
     }
 
     /// Sets the CAT version claim
     pub fn setCatVersion(self: *Claims, version: i64) !void {
-        try self.claims.put(LABEL_CATV, ClaimValue{ .Integer = version });
+        try self.setIntClaim(LABEL_CATV, version);
     }
 
     /// Gets the CAT version claim
     pub fn getCatVersion(self: Claims) ?i64 {
-        if (self.claims.get(LABEL_CATV)) |value| {
-            return switch (value) {
-                .Integer => |int| int,
-                else => null,
-            };
-        }
-        return null;
+        return self.getIntClaim(LABEL_CATV);
     }
 
     /// Sets a generic claim

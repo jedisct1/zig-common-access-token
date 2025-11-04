@@ -57,76 +57,40 @@ pub const CoseMac0 = struct {
     }
 
     /// Creates an authentication tag for the COSE_Mac0 structure.
-    ///
-    /// This method computes an HMAC-SHA256 tag over the MAC_structure as defined
-    /// in RFC 8152 Section 6.3. The MAC_structure includes:
-    /// - The context string "MAC0"
-    /// - The protected header
-    /// - The external AAD (empty in this implementation)
-    /// - The payload
     pub fn createTag(self: *CoseMac0, key: []const u8) !void {
-        // Serialize the protected header to CBOR
-        var protected_header_cbor = std.ArrayList(u8){};
-        defer protected_header_cbor.deinit(self.allocator);
-
-        try serializeCbor(self.allocator, self.protected_header, &protected_header_cbor);
-
-        // Create the MAC_structure as defined in RFC 8152 Section 6.3
-        // MAC_structure = [
-        //   context: "MAC0",
-        //   protected: bstr,
-        //   external_aad: bstr,
-        //   payload: bstr
-        // ]
-        var mac_structure = std.ArrayList(u8){};
-        defer mac_structure.deinit(self.allocator);
-
-        // Serialize the MAC_structure to CBOR
-        try serializeMacStructure(
-            self.allocator,
-            "MAC0",
-            protected_header_cbor.items,
-            &[_]u8{}, // empty external_aad
-            self.payload,
-            &mac_structure,
-        );
-
-        // Compute the HMAC
         var tag_buf: [crypto.auth.hmac.sha2.HmacSha256.mac_length]u8 = undefined;
-        crypto.auth.hmac.sha2.HmacSha256.create(&tag_buf, mac_structure.items, key);
-
-        // Store the tag
+        try self.computeMac(key, &tag_buf);
         self.tag = try self.allocator.dupe(u8, &tag_buf);
     }
 
     /// Verifies the authentication tag of the COSE_Mac0 structure.
     pub fn verify(self: *const CoseMac0, key: []const u8) !void {
-        // Serialize the protected header to CBOR
-        var protected_header_cbor = std.ArrayList(u8){};
-        defer protected_header_cbor.deinit(self.allocator);
-
-        try serializeCbor(self.allocator, self.protected_header, &protected_header_cbor);
-
-        // Create the MAC_structure
-        var mac_structure = std.ArrayList(u8){};
-        defer mac_structure.deinit(self.allocator);
-
-        try serializeMacStructure(
-            self.allocator,
-            "MAC0",
-            protected_header_cbor.items,
-            &[_]u8{}, // empty external_aad
-            self.payload,
-            &mac_structure,
-        );
-
-        // Compute and verify the HMAC
         var expected_tag: [crypto.auth.hmac.sha2.HmacSha256.mac_length]u8 = undefined;
-        crypto.auth.hmac.sha2.HmacSha256.create(&expected_tag, mac_structure.items, key);
+        try self.computeMac(key, &expected_tag);
 
         if (!crypto.timing_safe.eql(u8, &expected_tag, self.tag)) {
             return Error.TagMismatch;
         }
+    }
+
+    /// Computes the HMAC-SHA256 MAC for this COSE_Mac0 structure.
+    fn computeMac(self: *const CoseMac0, key: []const u8, out_tag: *[crypto.auth.hmac.sha2.HmacSha256.mac_length]u8) !void {
+        var protected_header_cbor = std.ArrayList(u8){};
+        defer protected_header_cbor.deinit(self.allocator);
+        try serializeCbor(self.allocator, self.protected_header, &protected_header_cbor);
+
+        var mac_structure = std.ArrayList(u8){};
+        defer mac_structure.deinit(self.allocator);
+        try serializeMacStructure(
+            self.allocator,
+            "MAC0",
+            protected_header_cbor.items,
+            &[_]u8{},
+            self.payload,
+            &mac_structure,
+        );
+
+        crypto.auth.hmac.sha2.HmacSha256.create(out_tag, mac_structure.items, key);
     }
 
     /// Serializes the COSE_Mac0 structure to CBOR.

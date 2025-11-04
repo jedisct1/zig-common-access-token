@@ -33,31 +33,23 @@ pub fn fromBase64Url(allocator: std.mem.Allocator, encoded: []const u8) ![]u8 {
     errdefer allocator.free(decoded);
 
     // Decode the data
-    const decoded_len: usize = max_decoded_len;
     base64.url_safe_no_pad.Decoder.decode(decoded, encoded) catch {
         return Error.Base64DecodingError;
     };
 
-    // Create a slice of the correct length
-    return decoded[0..decoded_len];
+    // The decoded buffer may be larger than needed, but return the full allocated slice
+    // since calcSizeForSlice already accounts for the actual size
+    return decoded;
 }
 
 /// Generates a random hex string of specified length
 pub fn generateRandomHex(allocator: std.mem.Allocator, bytes: usize) ![]u8 {
-    // Allocate memory for the random bytes
     const random_bytes = try allocator.alloc(u8, bytes);
     defer allocator.free(random_bytes);
-
-    // Generate random bytes
     crypto.random.bytes(random_bytes);
 
-    // Allocate memory for the hex string (2 chars per byte)
     const hex_str = try allocator.alloc(u8, bytes * 2);
-    errdefer allocator.free(hex_str);
-
-    // Convert bytes to hex using stdlib formatter
     _ = try std.fmt.bufPrint(hex_str, "{x}", .{random_bytes});
-
     return hex_str;
 }
 
