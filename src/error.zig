@@ -51,6 +51,9 @@ pub const Error = error{
     IpNotAllowed,
     AsnNotAllowed,
     RenewalClaimError,
+    InvalidUriClaim,
+    InvalidMethodClaim,
+    TokenReplayProhibited,
 
     // Token format errors
     InvalidTokenFormat,
@@ -112,6 +115,9 @@ pub fn errorToString(err: Error) []const u8 {
         Error.IpNotAllowed => "IP not allowed",
         Error.AsnNotAllowed => "ASN not allowed",
         Error.RenewalClaimError => "Renewal claim error",
+        Error.InvalidUriClaim => "Invalid URI claim",
+        Error.InvalidMethodClaim => "Invalid HTTP method claim",
+        Error.TokenReplayProhibited => "Token replay prohibited",
         Error.InvalidTokenFormat => "Invalid token format",
         Error.InvalidTokenStructure => "Invalid token structure",
         Error.InvalidTokenHeader => "Invalid token header",

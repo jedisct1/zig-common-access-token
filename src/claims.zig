@@ -29,9 +29,10 @@ pub const LABEL_CATALPN: u64 = 314;
 pub const LABEL_CATH: u64 = 315;
 pub const LABEL_CATGEOISO3166: u64 = 316;
 pub const LABEL_CATGEOCOORD: u64 = 317;
+pub const LABEL_CATGEOALT: u64 = 318;
 pub const LABEL_CATTPK: u64 = 319;
 pub const LABEL_CATIFDATA: u64 = 320;
-pub const LABEL_CATADPOP: u64 = 321;
+pub const LABEL_CATDPOP: u64 = 321;
 pub const LABEL_CATIF: u64 = 322;
 pub const LABEL_CATR: u64 = 323;
 
@@ -257,6 +258,98 @@ pub const Claims = struct {
     /// Gets the CAT version claim
     pub fn getCatVersion(self: Claims) ?i64 {
         return self.getIntClaim(LABEL_CATV);
+    }
+
+    /// Sets the CATREPLAY claim (0=permitted, 1=prohibited, 2=reuse-detection)
+    pub fn setCatReplay(self: *Claims, mode: i64) !void {
+        try self.setIntClaim(LABEL_CATREPLAY, mode);
+    }
+
+    /// Gets the CATREPLAY claim
+    pub fn getCatReplay(self: Claims) ?i64 {
+        return self.getIntClaim(LABEL_CATREPLAY);
+    }
+
+    /// Sets the CATPOR (Probability of Rejection) claim (0-100%)
+    pub fn setCatPor(self: *Claims, probability: i64) !void {
+        try self.setIntClaim(LABEL_CATPOR, probability);
+    }
+
+    /// Gets the CATPOR claim
+    pub fn getCatPor(self: Claims) ?i64 {
+        return self.getIntClaim(LABEL_CATPOR);
+    }
+
+    /// Sets the CATNIP (Network IP) claim with an array of IP addresses/ranges
+    pub fn setCatNip(self: *Claims, ips: []const []const u8) !void {
+        var array = ArrayList(ClaimValue){};
+        for (ips) |ip| {
+            const dup = try self.allocator.dupe(u8, ip);
+            try array.append(self.allocator, ClaimValue{ .String = dup });
+        }
+        try self.setClaimOwned(LABEL_CATNIP, ClaimValue{ .Array = array });
+    }
+
+    /// Gets the CATNIP claim as an array of strings
+    pub fn getCatNip(self: Claims) ?ArrayList(ClaimValue) {
+        return if (self.claims.get(LABEL_CATNIP)) |value| switch (value) {
+            .Array => |array| array,
+            else => null,
+        } else null;
+    }
+
+    /// Sets the CATM (HTTP Methods) claim with an array of allowed methods
+    pub fn setCatM(self: *Claims, methods: []const []const u8) !void {
+        var array = ArrayList(ClaimValue){};
+        for (methods) |method| {
+            const dup = try self.allocator.dupe(u8, method);
+            try array.append(self.allocator, ClaimValue{ .String = dup });
+        }
+        try self.setClaimOwned(LABEL_CATM, ClaimValue{ .Array = array });
+    }
+
+    /// Gets the CATM claim as an array of strings
+    pub fn getCatM(self: Claims) ?ArrayList(ClaimValue) {
+        return if (self.claims.get(LABEL_CATM)) |value| switch (value) {
+            .Array => |array| array,
+            else => null,
+        } else null;
+    }
+
+    /// Sets the CATALPN (TLS ALPN protocols) claim with an array of protocols
+    pub fn setCatAlpn(self: *Claims, protocols: []const []const u8) !void {
+        var array = ArrayList(ClaimValue){};
+        for (protocols) |protocol| {
+            const dup = try self.allocator.dupe(u8, protocol);
+            try array.append(self.allocator, ClaimValue{ .String = dup });
+        }
+        try self.setClaimOwned(LABEL_CATALPN, ClaimValue{ .Array = array });
+    }
+
+    /// Gets the CATALPN claim as an array of strings
+    pub fn getCatAlpn(self: Claims) ?ArrayList(ClaimValue) {
+        return if (self.claims.get(LABEL_CATALPN)) |value| switch (value) {
+            .Array => |array| array,
+            else => null,
+        } else null;
+    }
+
+    /// Sets the CATGEOISO3166 (country codes) claim with an array of ISO 3166 codes
+    pub fn setCatGeoIso3166(self: *Claims, country_codes: []const []const u8) !void {
+        var array = ArrayList(ClaimValue){};
+        for (country_codes) |code| {
+            const dup = try self.allocator.dupe(u8, code);
+            try array.append(self.allocator, ClaimValue{ .String = dup });
+        }
+        try self.setClaimOwned(LABEL_CATGEOISO3166, ClaimValue{ .Array = array });
+    }
+
+    /// Gets the CATGEOISO3166 claim as an array of strings
+    pub fn getCatGeoIso3166(self: Claims) ?ArrayList(ClaimValue) {
+        return if (self.claims.get(LABEL_CATGEOISO3166)) |value| switch (value) {
+            .Array => |array| array,
+            else => null,
+        } else null;
     }
 
     /// Sets a generic claim

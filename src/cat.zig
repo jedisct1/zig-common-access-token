@@ -21,6 +21,7 @@ const TAG_COSE_MAC0 = @import("cose.zig").TAG_COSE_MAC0;
 const TAG_CWT = @import("cose.zig").TAG_CWT;
 const util = @import("util.zig");
 const zbor = @import("zbor.zig");
+const validation = @import("validation.zig");
 
 /// Type of CAT validation mechanism to use for token generation and validation.
 pub const CatValidationType = enum {
@@ -74,6 +75,12 @@ pub const CatValidationOptions = struct {
 
     /// ASN to validate against (optional)
     asn: ?[]const u8 = null,
+
+    /// HTTP method to validate against CATM claim (optional)
+    http_method: ?[]const u8 = null,
+
+    /// Whether token has been seen before for CATREPLAY validation (default: false)
+    token_seen_before: bool = false,
 };
 
 /// Common Access Token (CAT) validator and generator.
@@ -216,7 +223,7 @@ pub const Cat = struct {
         return try Claims.fromCbor(self.allocator, payload);
     }
 
-    fn validateClaims(_: *const Cat, claims: Claims, options: CatValidationOptions) !void {
+    fn validateClaims(self: *const Cat, claims: Claims, options: CatValidationOptions) !void {
         const issuer = claims.getIssuer() orelse return Error.InvalidIssuer;
         if (!std.mem.eql(u8, issuer, options.issuer)) return Error.InvalidIssuer;
 
@@ -234,7 +241,19 @@ pub const Cat = struct {
             if (nbf > util.currentTimeSecs()) return Error.TokenNotActive;
         }
 
-        _ = options.url;
+        // Validate CATU (URI) claim if URL is provided
+        if (options.url) |url| {
+            try validation.validateCatu(self.allocator, claims, url);
+        }
+
+        // Validate CATM (HTTP method) claim if method is provided
+        if (options.http_method) |method| {
+            try validation.validateCatm(claims, method);
+        }
+
+        // Validate CATREPLAY claim
+        try validation.validateCatreplay(claims, options.token_seen_before);
+
         _ = options.ip;
         _ = options.asn;
     }

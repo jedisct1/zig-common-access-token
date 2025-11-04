@@ -8,6 +8,7 @@ pub const cose = @import("cose.zig");
 pub const errors = @import("error.zig");
 pub const util = @import("util.zig");
 pub const zbor = @import("zbor.zig");
+pub const validation = @import("validation.zig");
 
 pub const Cat = cat.Cat;
 pub const CatOptions = cat.CatOptions;
@@ -24,4 +25,5 @@ test {
     _ = @import("cose.zig");
     _ = @import("error.zig");
     _ = @import("util.zig");
+    _ = @import("validation.zig");
 }
