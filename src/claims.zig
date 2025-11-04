@@ -288,6 +288,16 @@ pub const Claims = struct {
         try self.claims.put(label, try value.clone(self.allocator));
     }
 
+    /// Sets a generic claim taking ownership without cloning
+    fn setClaimOwned(self: *Claims, label: u64, value: ClaimValue) !void {
+        // Free the old value if it exists to prevent memory leaks
+        if (self.claims.getPtr(label)) |old_value| {
+            var old_val = old_value.*;
+            old_val.deinit(self.allocator);
+        }
+        try self.claims.put(label, value);
+    }
+
     /// Gets a generic claim
     pub fn getClaim(self: Claims, label: u64) ?ClaimValue {
         return self.claims.get(label);
@@ -372,17 +382,15 @@ pub const Claims = struct {
             switch (major_type) {
                 .TextString => {
                     const str = try decoder.readText(allocator);
-                    defer allocator.free(str);
-                    try claims.setClaim(label, ClaimValue{ .String = try allocator.dupe(u8, str) });
+                    try claims.setClaimOwned(label, ClaimValue{ .String = str });
                 },
                 .UnsignedInt, .NegativeInt => {
                     const int = try decoder.readInt(i64);
-                    try claims.setClaim(label, ClaimValue{ .Integer = int });
+                    try claims.setClaimOwned(label, ClaimValue{ .Integer = int });
                 },
                 .ByteString => {
                     const bytes = try decoder.readBytes(allocator);
-                    defer allocator.free(bytes);
-                    try claims.setClaim(label, ClaimValue{ .Bytes = try allocator.dupe(u8, bytes) });
+                    try claims.setClaimOwned(label, ClaimValue{ .Bytes = bytes });
                 },
                 .Array => {
                     const array_len = try decoder.beginArray();
@@ -416,7 +424,7 @@ pub const Claims = struct {
                     }
 
                     try decoder.endArray();
-                    try claims.setClaim(label, ClaimValue{ .Array = array });
+                    try claims.setClaimOwned(label, ClaimValue{ .Array = array });
                 },
                 .Map => {
                     const map_len2 = try decoder.beginMap();
@@ -453,7 +461,7 @@ pub const Claims = struct {
                     }
 
                     try decoder.endMap();
-                    try claims.setClaim(label, ClaimValue{ .Map = map });
+                    try claims.setClaimOwned(label, ClaimValue{ .Map = map });
                 },
                 else => return Error.CborDecodingError,
             }
