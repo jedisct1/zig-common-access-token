@@ -23,29 +23,38 @@ pub fn main() !void {
     defer arena.deinit();
     const temp_allocator = arena.allocator();
 
-    // Decode the token
-    const decoded = cat.util.fromBase64Url(temp_allocator, token) catch |err| {
-        std.debug.print("Error decoding token: {any}\n", .{err});
-        return;
+    // Create a key for token validation
+    const key_hex = "403697de87af64611c1d32a05dab0fe1fcb715a86ab435f1ec99192d79569388";
+    const key = try cat.util.hexToBytes(temp_allocator, key_hex);
+
+    // Create a map of keys
+    var keys = std.StringHashMap([]const u8).init(temp_allocator);
+    try keys.put("Symmetric256", key);
+
+    // Create CAT options
+    const cat_options = cat.CatOptions{
+        .keys = keys,
+        .expect_cwt_tag = true,
     };
 
-    // Print the decoded token
+    // Create a CAT instance
+    var cat_instance = cat.Cat.init(allocator, cat_options);
+    defer cat_instance.deinit();
+
+    // Validate the token
+    var claims = cat_instance.validate(token, cat.CatValidationType.Mac, .{
+        .issuer = "example",
+        .audience = null,
+    }) catch |err| {
+        std.debug.print("Error validating token: {any}\n", .{err});
+        return;
+    };
+    defer claims.deinit();
+
+    // Print the results
     var stdout_buffer: [4096]u8 = undefined;
     var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
     const stdout = &stdout_writer.interface;
-    try stdout.print("Decoded token: ", .{});
-    for (decoded) |byte| {
-        try stdout.print("{x:0>2} ", .{byte});
-    }
-    try stdout.print("\n", .{});
-
-    // Create a dummy claims object
-    var claims = cat.Claims.init(temp_allocator);
-
-    try claims.setIssuer("dummy");
-    try claims.setSubject("user123");
-
-    // Print the claims
     try stdout.print("Token is valid!\n", .{});
 
     if (claims.getIssuer()) |issuer| {
@@ -54,6 +63,14 @@ pub fn main() !void {
 
     if (claims.getSubject()) |subject| {
         try stdout.print("Subject: {s}\n", .{subject});
+    }
+
+    if (claims.getAudience()) |audience| {
+        try stdout.print("Audience: {s}\n", .{audience});
+    }
+
+    if (claims.getExpiration()) |exp| {
+        try stdout.print("Expiration: {d}\n", .{exp});
     }
 
     try stdout.flush();

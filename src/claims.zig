@@ -53,8 +53,26 @@ pub const ClaimValue = union(enum) {
     Map: AutoHashMap(u64, ClaimValue),
 
     /// Frees memory associated with the claim value
-    pub fn deinit(_: *ClaimValue) void {
-        // The actual memory freeing is handled by the Claims.deinit method
+    pub fn deinit(self: *ClaimValue, allocator: Allocator) void {
+        switch (self.*) {
+            .String => |str| allocator.free(str),
+            .Bytes => |bytes| allocator.free(bytes),
+            .Array => |*array| {
+                for (array.items) |*item| {
+                    item.deinit(allocator);
+                }
+                array.deinit(allocator);
+            },
+            .Map => |*map| {
+                var it = map.iterator();
+                while (it.next()) |entry| {
+                    var value = entry.value_ptr.*;
+                    value.deinit(allocator);
+                }
+                map.deinit();
+            },
+            .Integer => {},
+        }
     }
 
     /// Creates a deep clone of the claim value
@@ -67,7 +85,7 @@ pub const ClaimValue = union(enum) {
                 var new_array = ArrayList(ClaimValue){};
                 errdefer {
                     for (new_array.items) |*item| {
-                        item.deinit();
+                        item.deinit(allocator);
                     }
                     new_array.deinit(allocator);
                 }
@@ -84,7 +102,7 @@ pub const ClaimValue = union(enum) {
                     var it = new_map.iterator();
                     while (it.next()) |entry| {
                         var value = entry.value_ptr.*;
-                        value.deinit();
+                        value.deinit(allocator);
                     }
                     new_map.deinit();
                 }
@@ -123,29 +141,7 @@ pub const Claims = struct {
         var it = self.claims.iterator();
         while (it.next()) |entry| {
             var value = entry.value_ptr.*;
-            switch (value) {
-                .String => |str| {
-                    self.allocator.free(str);
-                },
-                .Bytes => |bytes| {
-                    self.allocator.free(bytes);
-                },
-                .Array => |*array| {
-                    for (array.items) |*item| {
-                        item.deinit();
-                    }
-                    array.deinit(self.allocator);
-                },
-                .Map => |*map| {
-                    var map_it = map.iterator();
-                    while (map_it.next()) |map_entry| {
-                        var map_value = map_entry.value_ptr.*;
-                        map_value.deinit();
-                    }
-                    map.deinit();
-                },
-                else => {},
-            }
+            value.deinit(self.allocator);
         }
         self.claims.deinit();
     }
@@ -286,25 +282,8 @@ pub const Claims = struct {
     pub fn setClaim(self: *Claims, label: u64, value: ClaimValue) !void {
         // Free the old value if it exists to prevent memory leaks
         if (self.claims.getPtr(label)) |old_value| {
-            switch (old_value.*) {
-                .String => |str| self.allocator.free(str),
-                .Bytes => |bytes| self.allocator.free(bytes),
-                .Array => |*array| {
-                    for (array.items) |*item| {
-                        item.deinit();
-                    }
-                    array.deinit(self.allocator);
-                },
-                .Map => |*map| {
-                    var map_it = map.iterator();
-                    while (map_it.next()) |map_entry| {
-                        var map_value = map_entry.value_ptr.*;
-                        map_value.deinit();
-                    }
-                    map.deinit();
-                },
-                else => {},
-            }
+            var old_val = old_value.*;
+            old_val.deinit(self.allocator);
         }
         try self.claims.put(label, try value.clone(self.allocator));
     }
@@ -410,7 +389,7 @@ pub const Claims = struct {
                     var array = ArrayList(ClaimValue){};
                     errdefer {
                         for (array.items) |*item| {
-                            item.deinit();
+                            item.deinit(allocator);
                         }
                         array.deinit(allocator);
                     }
@@ -446,7 +425,7 @@ pub const Claims = struct {
                         var map_it = map.iterator();
                         while (map_it.next()) |map_entry| {
                             var map_value = map_entry.value_ptr.*;
-                            map_value.deinit();
+                            map_value.deinit(allocator);
                         }
                         map.deinit();
                     }
