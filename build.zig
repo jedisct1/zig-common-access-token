@@ -18,67 +18,80 @@ pub fn build(b: *std.Build) void {
     // Create a module for the library
     const cat_module = b.addModule("cat", .{
         .root_source_file = b.path("src/main.zig"),
+        .target = target,
+        .optimize = optimize,
     });
 
     // Build the library
-    const lib = b.addStaticLibrary(.{
+    const lib = b.addLibrary(.{
         .name = "zig-cat",
-        .root_source_file = b.path("src/main.zig"),
-        .target = target,
-        .optimize = optimize,
+        .root_module = cat_module,
+        .linkage = .static,
     });
     b.installArtifact(lib);
 
     // Build examples
     const generate_example = b.addExecutable(.{
         .name = "generate",
-        .root_source_file = b.path("examples/generate.zig"),
-        .target = target,
-        .optimize = optimize,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/generate.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
     });
     generate_example.root_module.addImport("cat", cat_module);
     b.installArtifact(generate_example);
 
     const validate_example = b.addExecutable(.{
         .name = "validate",
-        .root_source_file = b.path("examples/validate.zig"),
-        .target = target,
-        .optimize = optimize,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/validate.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
     });
     validate_example.root_module.addImport("cat", cat_module);
     b.installArtifact(validate_example);
 
     const interop_example = b.addExecutable(.{
         .name = "interop",
-        .root_source_file = b.path("examples/interop.zig"),
-        .target = target,
-        .optimize = optimize,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/interop.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
     });
     interop_example.root_module.addImport("cat", cat_module);
     b.installArtifact(interop_example);
 
     const cat_claims_example = b.addExecutable(.{
         .name = "cat_claims",
-        .root_source_file = b.path("examples/cat_claims.zig"),
-        .target = target,
-        .optimize = optimize,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/cat_claims.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
     });
     cat_claims_example.root_module.addImport("cat", cat_module);
     b.installArtifact(cat_claims_example);
 
     const minimal_example = b.addExecutable(.{
         .name = "minimal",
-        .root_source_file = b.path("examples/minimal.zig"),
-        .target = target,
-        .optimize = optimize,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/minimal.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
     });
     b.installArtifact(minimal_example);
 
     // Build tests
     const tests = b.addTest(.{
-        .root_source_file = b.path("tests/cat_test.zig"),
-        .target = target,
-        .optimize = optimize,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tests/cat_test.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
     });
     tests.root_module.addImport("cat", cat_module);
 

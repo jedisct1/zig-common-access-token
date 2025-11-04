@@ -101,6 +101,9 @@ pub fn main() !void {
     defer allocator.free(token);
 
     // Print the token
-    const stdout = std.io.getStdOut().writer();
+    var stdout_buffer: [4096]u8 = undefined;
+    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+    const stdout = &stdout_writer.interface;
     try stdout.print("Generated token with CAT-specific claims: {s}\n", .{token});
+    try stdout.flush();
 }

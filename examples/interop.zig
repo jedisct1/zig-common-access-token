@@ -11,7 +11,9 @@ pub fn main() !void {
     const args = try std.process.argsAlloc(std.heap.page_allocator);
     defer std.process.argsFree(std.heap.page_allocator, args);
 
-    const stdout = std.io.getStdOut().writer();
+    var stdout_buffer: [4096]u8 = undefined;
+    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+    const stdout = &stdout_writer.interface;
 
     if (args.len < 2) {
         // Generate a token to be validated by the NodeJS implementation
@@ -58,4 +60,6 @@ pub fn main() !void {
             try stdout.print("Subject: {s}\n", .{subject});
         }
     }
+
+    try stdout.flush();
 }

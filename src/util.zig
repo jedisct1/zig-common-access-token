@@ -69,7 +69,8 @@ pub fn generateRandomHex(allocator: std.mem.Allocator, bytes: usize) ![]u8 {
 
 /// Returns the current time in seconds since the Unix epoch
 pub fn currentTimeSecs() i64 {
-    return @divFloor(time.milliTimestamp(), 1000);
+    const ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
+    return @intCast(ts.sec);
 }
 
 /// Checks if a string is a valid hex string

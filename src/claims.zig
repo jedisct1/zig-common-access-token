@@ -134,7 +134,7 @@ pub const Claims = struct {
                     for (array.items) |*item| {
                         item.deinit();
                     }
-                    array.deinit();
+                    array.deinit(self.allocator);
                 },
                 .Map => |*map| {
                     var map_it = map.iterator();
