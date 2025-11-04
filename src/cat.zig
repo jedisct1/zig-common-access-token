@@ -112,7 +112,7 @@ pub const Cat = struct {
         // Copy all claims from the original
         var it = claims.claims.iterator();
         while (it.next()) |entry| {
-            try claims_copy.setClaim(entry.key_ptr.*, try entry.value_ptr.clone(self.allocator));
+            try claims_copy.setClaim(entry.key_ptr.*, entry.value_ptr.*);
         }
 
         // Add a random CWT ID if requested
@@ -141,11 +141,12 @@ pub const Cat = struct {
         defer self.allocator.free(token_bytes);
 
         // Validate the token based on the validation type
-        const claims = switch (validation_type) {
+        var claims = switch (validation_type) {
             .Mac => try self.validateMac(token_bytes),
             .Sign => return Error.Unexpected, // Not implemented
             .None => return Error.Unexpected, // Not implemented
         };
+        errdefer claims.deinit();
 
         // Validate the claims
         try self.validateClaims(claims, options);
@@ -169,7 +170,7 @@ pub const Cat = struct {
         errdefer protected_header.deinit();
 
         const alg_str = try std.fmt.allocPrint(self.allocator, "{d}", .{ALG_HS256});
-        errdefer self.allocator.free(alg_str);
+        defer self.allocator.free(alg_str);
         try protected_header.put(HEADER_ALG, alg_str);
 
         // Create the unprotected header
@@ -198,7 +199,7 @@ pub const Cat = struct {
         // If CWT tag is expected, wrap the COSE_Mac0 in the appropriate tags
         if (self.expect_cwt_tag) {
             var result = ArrayList(u8){};
-            errdefer result.deinit(self.allocator);
+            defer result.deinit(self.allocator);
 
             // First tag with COSE_Mac0 tag, then with CWT tag
             try self.serializeTaggedCbor(TAG_COSE_MAC0, cose_mac0_cbor.items, &result);
