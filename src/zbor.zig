@@ -67,13 +67,13 @@ pub const Encoder = struct {
         return .{
             .allocator = allocator,
             .buffer = std.ArrayList(u8).initCapacity(allocator, capacity) catch
-                std.ArrayList(u8).init(allocator),
+                std.ArrayList(u8){},
         };
     }
 
     /// Free resources
     pub fn deinit(self: *Encoder) void {
-        self.buffer.deinit();
+        self.buffer.deinit(self.allocator);
     }
 
     /// Reset the encoder to be reused
@@ -94,7 +94,7 @@ pub const Encoder = struct {
 
     /// Begin an indefinite-length CBOR array
     pub fn beginArrayIndefinite(self: *Encoder) !void {
-        try self.buffer.append(MajorType.Array.toByte() | AdditionalInfo.INDEFINITE);
+        try self.buffer.append(self.allocator,MajorType.Array.toByte() | AdditionalInfo.INDEFINITE);
         self.indefinite_level += 1;
     }
 
@@ -102,7 +102,7 @@ pub const Encoder = struct {
     pub fn endArray(self: *Encoder) !void {
         // Only needed for indefinite-length arrays
         if (self.indefinite_level > 0) {
-            try self.buffer.append(0xFF); // Break code
+            try self.buffer.append(self.allocator,0xFF); // Break code
             self.indefinite_level -= 1;
         }
     }
@@ -114,7 +114,7 @@ pub const Encoder = struct {
 
     /// Begin an indefinite-length CBOR map
     pub fn beginMapIndefinite(self: *Encoder) !void {
-        try self.buffer.append(MajorType.Map.toByte() | AdditionalInfo.INDEFINITE);
+        try self.buffer.append(self.allocator,MajorType.Map.toByte() | AdditionalInfo.INDEFINITE);
         self.indefinite_level += 1;
     }
 
@@ -122,7 +122,7 @@ pub const Encoder = struct {
     pub fn endMap(self: *Encoder) !void {
         // Only needed for indefinite-length maps
         if (self.indefinite_level > 0) {
-            try self.buffer.append(0xFF); // Break code
+            try self.buffer.append(self.allocator,0xFF); // Break code
             self.indefinite_level -= 1;
         }
     }
@@ -140,30 +140,30 @@ pub const Encoder = struct {
         const type_byte = major_type.toByte();
 
         if (unsigned_value <= AdditionalInfo.DIRECT) {
-            try self.buffer.append(type_byte | @as(u8, @intCast(unsigned_value)));
+            try self.buffer.append(self.allocator,type_byte | @as(u8, @intCast(unsigned_value)));
         } else if (unsigned_value <= std.math.maxInt(u8)) {
-            try self.buffer.append(type_byte | AdditionalInfo.ONE_BYTE);
-            try self.buffer.append(@as(u8, @intCast(unsigned_value)));
+            try self.buffer.append(self.allocator,type_byte | AdditionalInfo.ONE_BYTE);
+            try self.buffer.append(self.allocator,@as(u8, @intCast(unsigned_value)));
         } else if (unsigned_value <= std.math.maxInt(u16)) {
-            try self.buffer.append(type_byte | AdditionalInfo.TWO_BYTES);
-            try self.buffer.append(@as(u8, @intCast((unsigned_value >> 8) & 0xFF)));
-            try self.buffer.append(@as(u8, @intCast(unsigned_value & 0xFF)));
+            try self.buffer.append(self.allocator,type_byte | AdditionalInfo.TWO_BYTES);
+            try self.buffer.append(self.allocator,@as(u8, @intCast((unsigned_value >> 8) & 0xFF)));
+            try self.buffer.append(self.allocator,@as(u8, @intCast(unsigned_value & 0xFF)));
         } else if (unsigned_value <= std.math.maxInt(u32)) {
-            try self.buffer.append(type_byte | AdditionalInfo.FOUR_BYTES);
-            try self.buffer.append(@as(u8, @intCast((unsigned_value >> 24) & 0xFF)));
-            try self.buffer.append(@as(u8, @intCast((unsigned_value >> 16) & 0xFF)));
-            try self.buffer.append(@as(u8, @intCast((unsigned_value >> 8) & 0xFF)));
-            try self.buffer.append(@as(u8, @intCast(unsigned_value & 0xFF)));
+            try self.buffer.append(self.allocator,type_byte | AdditionalInfo.FOUR_BYTES);
+            try self.buffer.append(self.allocator,@as(u8, @intCast((unsigned_value >> 24) & 0xFF)));
+            try self.buffer.append(self.allocator,@as(u8, @intCast((unsigned_value >> 16) & 0xFF)));
+            try self.buffer.append(self.allocator,@as(u8, @intCast((unsigned_value >> 8) & 0xFF)));
+            try self.buffer.append(self.allocator,@as(u8, @intCast(unsigned_value & 0xFF)));
         } else {
-            try self.buffer.append(type_byte | AdditionalInfo.EIGHT_BYTES);
-            try self.buffer.append(@as(u8, @intCast((unsigned_value >> 56) & 0xFF)));
-            try self.buffer.append(@as(u8, @intCast((unsigned_value >> 48) & 0xFF)));
-            try self.buffer.append(@as(u8, @intCast((unsigned_value >> 40) & 0xFF)));
-            try self.buffer.append(@as(u8, @intCast((unsigned_value >> 32) & 0xFF)));
-            try self.buffer.append(@as(u8, @intCast((unsigned_value >> 24) & 0xFF)));
-            try self.buffer.append(@as(u8, @intCast((unsigned_value >> 16) & 0xFF)));
-            try self.buffer.append(@as(u8, @intCast((unsigned_value >> 8) & 0xFF)));
-            try self.buffer.append(@as(u8, @intCast(unsigned_value & 0xFF)));
+            try self.buffer.append(self.allocator,type_byte | AdditionalInfo.EIGHT_BYTES);
+            try self.buffer.append(self.allocator,@as(u8, @intCast((unsigned_value >> 56) & 0xFF)));
+            try self.buffer.append(self.allocator,@as(u8, @intCast((unsigned_value >> 48) & 0xFF)));
+            try self.buffer.append(self.allocator,@as(u8, @intCast((unsigned_value >> 40) & 0xFF)));
+            try self.buffer.append(self.allocator,@as(u8, @intCast((unsigned_value >> 32) & 0xFF)));
+            try self.buffer.append(self.allocator,@as(u8, @intCast((unsigned_value >> 24) & 0xFF)));
+            try self.buffer.append(self.allocator,@as(u8, @intCast((unsigned_value >> 16) & 0xFF)));
+            try self.buffer.append(self.allocator,@as(u8, @intCast((unsigned_value >> 8) & 0xFF)));
+            try self.buffer.append(self.allocator,@as(u8, @intCast(unsigned_value & 0xFF)));
         }
     }
 
@@ -192,17 +192,17 @@ pub const Encoder = struct {
 
     /// Push a boolean value
     pub fn pushBool(self: *Encoder, value: bool) !void {
-        try self.buffer.append(MajorType.Simple.toByte() | (if (value) SimpleValue.TRUE else SimpleValue.FALSE));
+        try self.buffer.append(self.allocator,MajorType.Simple.toByte() | (if (value) SimpleValue.TRUE else SimpleValue.FALSE));
     }
 
     /// Push a null value
     pub fn pushNull(self: *Encoder) !void {
-        try self.buffer.append(MajorType.Simple.toByte() | SimpleValue.NULL);
+        try self.buffer.append(self.allocator,MajorType.Simple.toByte() | SimpleValue.NULL);
     }
 
     /// Push an undefined value
     pub fn pushUndefined(self: *Encoder) !void {
-        try self.buffer.append(MajorType.Simple.toByte() | SimpleValue.UNDEFINED);
+        try self.buffer.append(self.allocator,MajorType.Simple.toByte() | SimpleValue.UNDEFINED);
     }
 
     /// Push a floating-point value
@@ -210,28 +210,28 @@ pub const Encoder = struct {
         const T = @TypeOf(value);
 
         if (T == f16) {
-            try self.buffer.append(MajorType.Simple.toByte() | AdditionalInfo.TWO_BYTES);
+            try self.buffer.append(self.allocator,MajorType.Simple.toByte() | AdditionalInfo.TWO_BYTES);
             const bits = @as(u16, @bitCast(value));
-            try self.buffer.append(@as(u8, @intCast((bits >> 8) & 0xFF)));
-            try self.buffer.append(@as(u8, @intCast(bits & 0xFF)));
+            try self.buffer.append(self.allocator,@as(u8, @intCast((bits >> 8) & 0xFF)));
+            try self.buffer.append(self.allocator,@as(u8, @intCast(bits & 0xFF)));
         } else if (T == f32) {
-            try self.buffer.append(MajorType.Simple.toByte() | AdditionalInfo.FOUR_BYTES);
+            try self.buffer.append(self.allocator,MajorType.Simple.toByte() | AdditionalInfo.FOUR_BYTES);
             const bits = @as(u32, @bitCast(value));
-            try self.buffer.append(@as(u8, @intCast((bits >> 24) & 0xFF)));
-            try self.buffer.append(@as(u8, @intCast((bits >> 16) & 0xFF)));
-            try self.buffer.append(@as(u8, @intCast((bits >> 8) & 0xFF)));
-            try self.buffer.append(@as(u8, @intCast(bits & 0xFF)));
+            try self.buffer.append(self.allocator,@as(u8, @intCast((bits >> 24) & 0xFF)));
+            try self.buffer.append(self.allocator,@as(u8, @intCast((bits >> 16) & 0xFF)));
+            try self.buffer.append(self.allocator,@as(u8, @intCast((bits >> 8) & 0xFF)));
+            try self.buffer.append(self.allocator,@as(u8, @intCast(bits & 0xFF)));
         } else if (T == f64) {
-            try self.buffer.append(MajorType.Simple.toByte() | AdditionalInfo.EIGHT_BYTES);
+            try self.buffer.append(self.allocator,MajorType.Simple.toByte() | AdditionalInfo.EIGHT_BYTES);
             const bits = @as(u64, @bitCast(value));
-            try self.buffer.append(@as(u8, @intCast((bits >> 56) & 0xFF)));
-            try self.buffer.append(@as(u8, @intCast((bits >> 48) & 0xFF)));
-            try self.buffer.append(@as(u8, @intCast((bits >> 40) & 0xFF)));
-            try self.buffer.append(@as(u8, @intCast((bits >> 32) & 0xFF)));
-            try self.buffer.append(@as(u8, @intCast((bits >> 24) & 0xFF)));
-            try self.buffer.append(@as(u8, @intCast((bits >> 16) & 0xFF)));
-            try self.buffer.append(@as(u8, @intCast((bits >> 8) & 0xFF)));
-            try self.buffer.append(@as(u8, @intCast(bits & 0xFF)));
+            try self.buffer.append(self.allocator,@as(u8, @intCast((bits >> 56) & 0xFF)));
+            try self.buffer.append(self.allocator,@as(u8, @intCast((bits >> 48) & 0xFF)));
+            try self.buffer.append(self.allocator,@as(u8, @intCast((bits >> 40) & 0xFF)));
+            try self.buffer.append(self.allocator,@as(u8, @intCast((bits >> 32) & 0xFF)));
+            try self.buffer.append(self.allocator,@as(u8, @intCast((bits >> 24) & 0xFF)));
+            try self.buffer.append(self.allocator,@as(u8, @intCast((bits >> 16) & 0xFF)));
+            try self.buffer.append(self.allocator,@as(u8, @intCast((bits >> 8) & 0xFF)));
+            try self.buffer.append(self.allocator,@as(u8, @intCast(bits & 0xFF)));
         } else {
             @compileError("Unsupported type for pushFloat");
         }
@@ -240,24 +240,24 @@ pub const Encoder = struct {
     /// Push a byte string
     pub fn pushBytes(self: *Encoder, bytes: []const u8) !void {
         try self.writeTypeAndValue(MajorType.ByteString, bytes.len);
-        try self.buffer.appendSlice(bytes);
+        try self.buffer.appendSlice(self.allocator,bytes);
     }
 
     /// Push an indefinite-length byte string
     pub fn pushBytesIndefinite(self: *Encoder) !void {
-        try self.buffer.append(MajorType.ByteString.toByte() | AdditionalInfo.INDEFINITE);
+        try self.buffer.append(self.allocator,MajorType.ByteString.toByte() | AdditionalInfo.INDEFINITE);
         self.indefinite_level += 1;
     }
 
     /// Push a text string
     pub fn pushText(self: *Encoder, text: []const u8) !void {
         try self.writeTypeAndValue(MajorType.TextString, text.len);
-        try self.buffer.appendSlice(text);
+        try self.buffer.appendSlice(self.allocator,text);
     }
 
     /// Push an indefinite-length text string
     pub fn pushTextIndefinite(self: *Encoder) !void {
-        try self.buffer.append(MajorType.TextString.toByte() | AdditionalInfo.INDEFINITE);
+        try self.buffer.append(self.allocator,MajorType.TextString.toByte() | AdditionalInfo.INDEFINITE);
         self.indefinite_level += 1;
     }
 
@@ -268,7 +268,7 @@ pub const Encoder = struct {
 
     /// Push a break code (to end indefinite-length items)
     pub fn pushBreak(self: *Encoder) !void {
-        try self.buffer.append(0xFF);
+        try self.buffer.append(self.allocator,0xFF);
         if (self.indefinite_level > 0) {
             self.indefinite_level -= 1;
         }
@@ -276,7 +276,7 @@ pub const Encoder = struct {
 
     /// Push raw CBOR data
     pub fn pushRaw(self: *Encoder, data: []const u8) !void {
-        try self.buffer.appendSlice(data);
+        try self.buffer.appendSlice(self.allocator,data);
     }
 
     /// Finish encoding and return the result
@@ -687,8 +687,8 @@ pub const Decoder = struct {
             self.indefinite_level += 1;
 
             // For simplicity, we'll just concatenate all chunks
-            var result = std.ArrayList(u8).init(allocator);
-            errdefer result.deinit();
+            var result = std.ArrayList(u8){};
+            errdefer result.deinit(allocator);
 
             while (true) {
                 if (try self.isBreakCode()) {
@@ -732,8 +732,8 @@ pub const Decoder = struct {
             self.indefinite_level += 1;
 
             // For simplicity, we'll just concatenate all chunks
-            var result = std.ArrayList(u8).init(allocator);
-            errdefer result.deinit();
+            var result = std.ArrayList(u8){};
+            errdefer result.deinit(allocator);
 
             while (true) {
                 if (try self.isBreakCode()) {

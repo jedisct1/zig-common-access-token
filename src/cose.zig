@@ -66,8 +66,8 @@ pub const CoseMac0 = struct {
     /// - The payload
     pub fn createTag(self: *CoseMac0, key: []const u8) !void {
         // Serialize the protected header to CBOR
-        var protected_header_cbor = std.ArrayList(u8).init(self.allocator);
-        defer protected_header_cbor.deinit();
+        var protected_header_cbor = std.ArrayList(u8){};
+        defer protected_header_cbor.deinit(self.allocator);
 
         try serializeCbor(self.allocator, self.protected_header, &protected_header_cbor);
 
@@ -78,8 +78,8 @@ pub const CoseMac0 = struct {
         //   external_aad: bstr,
         //   payload: bstr
         // ]
-        var mac_structure = std.ArrayList(u8).init(self.allocator);
-        defer mac_structure.deinit();
+        var mac_structure = std.ArrayList(u8){};
+        defer mac_structure.deinit(self.allocator);
 
         // Serialize the MAC_structure to CBOR
         try serializeMacStructure(
@@ -102,14 +102,14 @@ pub const CoseMac0 = struct {
     /// Verifies the authentication tag of the COSE_Mac0 structure.
     pub fn verify(self: *const CoseMac0, key: []const u8) !void {
         // Serialize the protected header to CBOR
-        var protected_header_cbor = std.ArrayList(u8).init(self.allocator);
-        defer protected_header_cbor.deinit();
+        var protected_header_cbor = std.ArrayList(u8){};
+        defer protected_header_cbor.deinit(self.allocator);
 
         try serializeCbor(self.allocator, self.protected_header, &protected_header_cbor);
 
         // Create the MAC_structure
-        var mac_structure = std.ArrayList(u8).init(self.allocator);
-        defer mac_structure.deinit();
+        var mac_structure = std.ArrayList(u8){};
+        defer mac_structure.deinit(self.allocator);
 
         try serializeMacStructure(
             self.allocator,
@@ -139,14 +139,14 @@ pub const CoseMac0 = struct {
         // ]
 
         // Serialize the protected header to CBOR
-        var protected_header_cbor = std.ArrayList(u8).init(self.allocator);
-        defer protected_header_cbor.deinit();
+        var protected_header_cbor = std.ArrayList(u8){};
+        defer protected_header_cbor.deinit(self.allocator);
 
         try serializeCbor(self.allocator, self.protected_header, &protected_header_cbor);
 
         // Serialize the unprotected header to CBOR
-        var unprotected_header_cbor = std.ArrayList(u8).init(self.allocator);
-        defer unprotected_header_cbor.deinit();
+        var unprotected_header_cbor = std.ArrayList(u8){};
+        defer unprotected_header_cbor.deinit(self.allocator);
 
         try serializeCbor(self.allocator, self.unprotected_header, &unprotected_header_cbor);
 
@@ -200,7 +200,7 @@ fn serializeCbor(
     defer allocator.free(cbor_data);
 
     // Append the encoded CBOR to the output
-    try out.appendSlice(cbor_data);
+    try out.appendSlice(allocator, cbor_data);
 }
 
 /// Serializes a MAC_structure to CBOR.
@@ -238,7 +238,7 @@ fn serializeMacStructure(
     defer allocator.free(cbor_data);
 
     // Append the encoded CBOR to the output
-    try out.appendSlice(cbor_data);
+    try out.appendSlice(allocator, cbor_data);
 }
 
 /// Serializes a COSE_Mac0 structure to CBOR.
@@ -281,7 +281,7 @@ fn serializeCoseMac0(
     defer allocator.free(cbor_data);
 
     // Append the encoded CBOR to the output
-    try out.appendSlice(cbor_data);
+    try out.appendSlice(allocator, cbor_data);
 }
 
 test "COSE_Mac0 basic operations" {
@@ -303,8 +303,8 @@ test "COSE_Mac0 basic operations" {
     try cose_mac0.createTag("key");
     try cose_mac0.verify("key");
 
-    var cbor = std.ArrayList(u8).init(allocator);
-    defer cbor.deinit();
+    var cbor = std.ArrayList(u8){};
+    defer cbor.deinit(allocator);
 
     try cose_mac0.toCbor(&cbor);
     try testing.expect(cbor.items.len > 0);

@@ -157,8 +157,8 @@ pub const Cat = struct {
         const key = self.getKey(kid) orelse return Error.KeyNotFound;
 
         // Serialize the claims to CBOR
-        var claims_cbor = ArrayList(u8).init(self.allocator);
-        defer claims_cbor.deinit();
+        var claims_cbor = ArrayList(u8){};
+        defer claims_cbor.deinit(self.allocator);
 
         try self.serializeClaims(claims, &claims_cbor);
 
@@ -188,21 +188,21 @@ pub const Cat = struct {
         try cose_mac0.createTag(key);
 
         // Serialize the COSE_Mac0 structure
-        var cose_mac0_cbor = ArrayList(u8).init(self.allocator);
-        defer cose_mac0_cbor.deinit();
+        var cose_mac0_cbor = ArrayList(u8){};
+        defer cose_mac0_cbor.deinit(self.allocator);
 
         try cose_mac0.toCbor(&cose_mac0_cbor);
 
         // If CWT tag is expected, wrap the COSE_Mac0 in the appropriate tags
         if (self.expect_cwt_tag) {
-            var result = ArrayList(u8).init(self.allocator);
-            errdefer result.deinit();
+            var result = ArrayList(u8){};
+            errdefer result.deinit(self.allocator);
 
             // First tag with COSE_Mac0 tag, then with CWT tag
             try self.serializeTaggedCbor(TAG_COSE_MAC0, cose_mac0_cbor.items, &result);
 
-            var tagged_cose_mac0_cbor = ArrayList(u8).init(self.allocator);
-            defer tagged_cose_mac0_cbor.deinit();
+            var tagged_cose_mac0_cbor = ArrayList(u8){};
+            defer tagged_cose_mac0_cbor.deinit(self.allocator);
 
             try self.serializeTaggedCbor(TAG_CWT, result.items, &tagged_cose_mac0_cbor);
 
@@ -330,7 +330,7 @@ pub const Cat = struct {
         defer claims.allocator.free(cbor_data);
 
         // Append the serialized claims to the output
-        try out.appendSlice(cbor_data);
+        try out.appendSlice(claims.allocator, cbor_data);
     }
 
     /// Serializes a tagged CBOR value.
@@ -349,7 +349,7 @@ pub const Cat = struct {
         defer self.allocator.free(cbor_data);
 
         // Append the encoded CBOR to the output
-        try out.appendSlice(cbor_data);
+        try out.appendSlice(self.allocator, cbor_data);
     }
 };
 

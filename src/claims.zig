@@ -64,16 +64,16 @@ pub const ClaimValue = union(enum) {
             .Integer => |int| ClaimValue{ .Integer = int },
             .Bytes => |bytes| ClaimValue{ .Bytes = try allocator.dupe(u8, bytes) },
             .Array => |array| blk: {
-                var new_array = ArrayList(ClaimValue).init(allocator);
+                var new_array = ArrayList(ClaimValue){};
                 errdefer {
                     for (new_array.items) |*item| {
                         item.deinit();
                     }
-                    new_array.deinit();
+                    new_array.deinit(allocator);
                 }
 
                 for (array.items) |item| {
-                    try new_array.append(try item.clone(allocator));
+                    try new_array.append(allocator, try item.clone(allocator));
                 }
 
                 break :blk ClaimValue{ .Array = new_array };
@@ -391,12 +391,12 @@ pub const Claims = struct {
                 },
                 .Array => {
                     const array_len = try decoder.beginArray();
-                    var array = ArrayList(ClaimValue).init(allocator);
+                    var array = ArrayList(ClaimValue){};
                     errdefer {
                         for (array.items) |*item| {
                             item.deinit();
                         }
-                        array.deinit();
+                        array.deinit(allocator);
                     }
 
                     var j: usize = 0;
@@ -406,15 +406,15 @@ pub const Claims = struct {
                         switch (item_major_type) {
                             .TextString => {
                                 const str = try decoder.readText(allocator);
-                                try array.append(ClaimValue{ .String = str });
+                                try array.append(allocator, ClaimValue{ .String = str });
                             },
                             .UnsignedInt, .NegativeInt => {
                                 const int = try decoder.readInt(i64);
-                                try array.append(ClaimValue{ .Integer = int });
+                                try array.append(allocator, ClaimValue{ .Integer = int });
                             },
                             .ByteString => {
                                 const bytes = try decoder.readBytes(allocator);
-                                try array.append(ClaimValue{ .Bytes = bytes });
+                                try array.append(allocator, ClaimValue{ .Bytes = bytes });
                             },
                             else => return Error.CborDecodingError,
                         }
