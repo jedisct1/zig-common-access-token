@@ -699,10 +699,10 @@ pub const Decoder = struct {
                 const chunk = try self.readBytes(allocator);
                 defer allocator.free(chunk);
 
-                try result.appendSlice(chunk);
+                try result.appendSlice(allocator, chunk);
             }
 
-            return result.toOwnedSlice();
+            return result.toOwnedSlice(allocator);
         } else {
             // Fixed-length byte string
             const len = try self.readAdditionalValue(additional_info);
@@ -744,10 +744,10 @@ pub const Decoder = struct {
                 const chunk = try self.readText(allocator);
                 defer allocator.free(chunk);
 
-                try result.appendSlice(chunk);
+                try result.appendSlice(allocator, chunk);
             }
 
-            return result.toOwnedSlice();
+            return result.toOwnedSlice(allocator);
         } else {
             // Fixed-length text string
             const len = try self.readAdditionalValue(additional_info);
