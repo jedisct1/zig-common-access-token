@@ -285,9 +285,7 @@ pub const Decoder = struct {
     }
 
     /// Free resources
-    pub fn deinit(_: *Decoder) void {
-        // Nothing to free
-    }
+    pub fn deinit(_: *Decoder) void {}
 
     /// Reset the decoder to be reused with new data
     pub fn reset(self: *Decoder, data: []const u8) void {

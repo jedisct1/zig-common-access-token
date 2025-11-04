@@ -8,37 +8,26 @@ const Error = @import("error.zig").Error;
 
 /// Encodes binary data to base64 URL-safe format without padding
 pub fn toBase64NoPadding(allocator: std.mem.Allocator, data: []const u8) ![]u8 {
-    // Calculate the base64 encoded length
     const encoded_len = base64.url_safe_no_pad.Encoder.calcSize(data.len);
-
-    // Allocate memory for the encoded string
     const encoded = try allocator.alloc(u8, encoded_len);
     errdefer allocator.free(encoded);
-
-    // Encode the data
     _ = base64.url_safe_no_pad.Encoder.encode(encoded, data);
-
     return encoded;
 }
 
 /// Decodes a base64 URL-safe string to binary data
 pub fn fromBase64Url(allocator: std.mem.Allocator, encoded: []const u8) ![]u8 {
-    // Calculate the maximum possible decoded length
     const max_decoded_len = base64.url_safe_no_pad.Decoder.calcSizeForSlice(encoded) catch {
         return Error.Base64DecodingError;
     };
 
-    // Allocate memory for the decoded data
     const decoded = try allocator.alloc(u8, max_decoded_len);
     errdefer allocator.free(decoded);
 
-    // Decode the data
     base64.url_safe_no_pad.Decoder.decode(decoded, encoded) catch {
         return Error.Base64DecodingError;
     };
 
-    // The decoded buffer may be larger than needed, but return the full allocated slice
-    // since calcSizeForSlice already accounts for the actual size
     return decoded;
 }
 
@@ -76,17 +65,11 @@ pub fn isHex(str: []const u8) bool {
 
 /// Converts a hex string to bytes
 pub fn hexToBytes(allocator: std.mem.Allocator, hex: []const u8) ![]u8 {
-    if (hex.len % 2 != 0) {
-        return Error.InvalidArgument;
-    }
+    if (hex.len % 2 != 0) return Error.InvalidArgument;
 
-    const bytes_len = hex.len / 2;
-    const bytes = try allocator.alloc(u8, bytes_len);
+    const bytes = try allocator.alloc(u8, hex.len / 2);
     errdefer allocator.free(bytes);
-
-    // Use stdlib function to parse hex
     _ = std.fmt.hexToBytes(bytes, hex) catch return Error.InvalidArgument;
-
     return bytes;
 }
 

@@ -49,11 +49,11 @@ pub const CoseMac0 = struct {
         };
     }
 
-    /// Frees memory associated with the COSE_Mac0 structure
+    /// Frees memory associated with the COSE_Mac0 structure.
+    /// Note: Payload and tag are not freed as they may be owned by the caller.
     pub fn deinit(self: *CoseMac0) void {
         self.protected_header.deinit();
         self.unprotected_header.deinit();
-        // Payload and tag are not freed here as they might be owned by the caller
     }
 
     /// Creates an authentication tag for the COSE_Mac0 structure.
@@ -93,28 +93,16 @@ pub const CoseMac0 = struct {
         crypto.auth.hmac.sha2.HmacSha256.create(out_tag, mac_structure.items, key);
     }
 
-    /// Serializes the COSE_Mac0 structure to CBOR.
+    /// Serializes the COSE_Mac0 structure to CBOR
     pub fn toCbor(self: *const CoseMac0, out: *std.ArrayList(u8)) !void {
-        // COSE_Mac0 = [
-        //   protected: bstr,
-        //   unprotected: map,
-        //   payload: bstr,
-        //   tag: bstr
-        // ]
-
-        // Serialize the protected header to CBOR
         var protected_header_cbor = std.ArrayList(u8){};
         defer protected_header_cbor.deinit(self.allocator);
-
         try serializeCbor(self.allocator, self.protected_header, &protected_header_cbor);
 
-        // Serialize the unprotected header to CBOR
         var unprotected_header_cbor = std.ArrayList(u8){};
         defer unprotected_header_cbor.deinit(self.allocator);
-
         try serializeCbor(self.allocator, self.unprotected_header, &unprotected_header_cbor);
 
-        // Serialize the COSE_Mac0 structure
         try serializeCoseMac0(
             self.allocator,
             protected_header_cbor.items,
@@ -131,7 +119,6 @@ pub const CoseMac0 = struct {
     }
 };
 
-/// Serializes a CBOR map to a byte array.
 fn serializeCbor(
     allocator: Allocator,
     map: AutoHashMap(i64, []const u8),
@@ -140,40 +127,27 @@ fn serializeCbor(
     var encoder = zbor.Encoder.init(allocator);
     defer encoder.deinit();
 
-    // Start a map with the number of entries
     try encoder.beginMap(@intCast(map.count()));
 
-    // Add each entry to the map
     var it = map.iterator();
     while (it.next()) |entry| {
         const key = entry.key_ptr.*;
         const value = entry.value_ptr.*;
 
-        // Add the key as an integer
         try encoder.pushInt(key);
 
-        // Special handling for algorithm header - must be integer
         if (key == HEADER_ALG) {
-            // Parse the value as an integer
             const alg_int = try std.fmt.parseInt(i64, value, 10);
             try encoder.pushInt(alg_int);
         } else {
-            // Add the value as a byte string
             try encoder.pushBytes(value);
         }
     }
 
-    // End the map
     try encoder.endMap();
-
-    // Get the encoded CBOR (no copy needed with arena allocator)
-    const cbor_data = encoder.finish();
-
-    // Append the encoded CBOR to the output
-    try out.appendSlice(allocator, cbor_data);
+    try out.appendSlice(allocator, encoder.finish());
 }
 
-/// Serializes a MAC_structure to CBOR.
 fn serializeMacStructure(
     allocator: Allocator,
     context: []const u8,
@@ -185,32 +159,16 @@ fn serializeMacStructure(
     var encoder = zbor.Encoder.init(allocator);
     defer encoder.deinit();
 
-    // Start an array with 4 items
     try encoder.beginArray(4);
-
-    // Context
     try encoder.pushText(context);
-
-    // Protected
     try encoder.pushBytes(protected);
-
-    // External AAD
     try encoder.pushBytes(external_aad);
-
-    // Payload
     try encoder.pushBytes(payload);
-
-    // End the array
     try encoder.endArray();
 
-    // Get the encoded CBOR (no copy needed with arena allocator)
-    const cbor_data = encoder.finish();
-
-    // Append the encoded CBOR to the output
-    try out.appendSlice(allocator, cbor_data);
+    try out.appendSlice(allocator, encoder.finish());
 }
 
-/// Serializes a COSE_Mac0 structure to CBOR.
 fn serializeCoseMac0(
     allocator: Allocator,
     protected: []const u8,
@@ -222,30 +180,14 @@ fn serializeCoseMac0(
     var encoder = zbor.Encoder.init(allocator);
     defer encoder.deinit();
 
-    // Start an array with 4 items
     try encoder.beginArray(4);
-
-    // Protected
     try encoder.pushBytes(protected);
-
-    // Unprotected (must be a direct map, not wrapped in bytes)
-    // Push the raw CBOR-encoded map directly
     try encoder.pushRaw(unprotected);
-
-    // Payload
     try encoder.pushBytes(payload);
-
-    // Tag
     try encoder.pushBytes(tag);
-
-    // End the array
     try encoder.endArray();
 
-    // Get the encoded CBOR (no copy needed with arena allocator)
-    const cbor_data = encoder.finish();
-
-    // Append the encoded CBOR to the output
-    try out.appendSlice(allocator, cbor_data);
+    try out.appendSlice(allocator, encoder.finish());
 }
 
 test "COSE_Mac0 basic operations" {

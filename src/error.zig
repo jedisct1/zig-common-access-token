@@ -1,9 +1,6 @@
 const std = @import("std");
 
-/// Errors that can occur during CAT token operations.
-///
-/// This enum represents all the possible errors that can occur when
-/// generating, validating, or processing CAT tokens.
+/// Errors that can occur during CAT token operations
 pub const Error = error{
     // CBOR encoding/decoding errors
     CborEncodingError,
@@ -74,10 +71,9 @@ pub const Error = error{
     Unexpected,
 };
 
-/// Converts an error to a human-readable string.
+/// Converts an error to a human-readable string
 pub fn errorToString(err: Error) []const u8 {
     return switch (err) {
-        // CBOR encoding/decoding errors
         Error.CborEncodingError => "CBOR encoding error",
         Error.CborDecodingError => "CBOR decoding error",
         Error.CborTypeMismatch => "CBOR type mismatch",
@@ -85,30 +81,20 @@ pub fn errorToString(err: Error) []const u8 {
         Error.CborUnexpectedEndOfData => "CBOR unexpected end of data",
         Error.CborInvalidIndefiniteLength => "CBOR invalid indefinite length",
         Error.CborInvalidBreakCode => "CBOR invalid break code",
-
-        // I/O errors
         Error.IoError => "I/O error",
-
-        // Base64 encoding/decoding errors
         Error.Base64EncodingError => "Base64 encoding error",
         Error.Base64DecodingError => "Base64 decoding error",
         Error.Base64InvalidPadding => "Base64 invalid padding",
         Error.Base64InvalidCharacter => "Base64 invalid character",
-
-        // JSON errors
         Error.JsonError => "JSON error",
         Error.JsonParsingError => "JSON parsing error",
         Error.JsonInvalidValue => "JSON invalid value",
         Error.JsonMissingField => "JSON missing field",
-
-        // Key-related errors
         Error.KeyNotFound => "Key not found",
         Error.KeyInvalidFormat => "Key invalid format",
         Error.KeyInvalidSize => "Key invalid size",
         Error.KeyInvalidType => "Key invalid type",
         Error.KeyInvalidAlgorithm => "Key invalid algorithm",
-
-        // Validation errors
         Error.InvalidIssuer => "Invalid issuer",
         Error.TokenExpired => "Token expired",
         Error.TokenNotActive => "Token not yet active",
@@ -126,19 +112,13 @@ pub fn errorToString(err: Error) []const u8 {
         Error.IpNotAllowed => "IP not allowed",
         Error.AsnNotAllowed => "ASN not allowed",
         Error.RenewalClaimError => "Renewal claim error",
-
-        // Token format errors
         Error.InvalidTokenFormat => "Invalid token format",
         Error.InvalidTokenStructure => "Invalid token structure",
         Error.InvalidTokenHeader => "Invalid token header",
         Error.InvalidTokenPayload => "Invalid token payload",
         Error.InvalidTokenSignature => "Invalid token signature",
-
-        // Algorithm errors
         Error.UnsupportedAlgorithm => "Unsupported algorithm",
         Error.InvalidAlgorithmForKeyType => "Invalid algorithm for key type",
-
-        // Other errors
         Error.OutOfMemory => "Out of memory",
         Error.InvalidArgument => "Invalid argument",
         Error.MemoryAllocationError => "Memory allocation error",

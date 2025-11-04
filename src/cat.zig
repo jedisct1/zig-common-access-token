@@ -99,232 +99,153 @@ pub const Cat = struct {
     /// Frees memory associated with the CAT instance.
     /// Note: The keys hashmap is not owned by Cat and should be freed by the caller.
     pub fn deinit(self: *Cat) void {
-        // The keys hashmap is owned by the caller, so we don't deinit it here
         _ = self;
     }
 
-    /// Generates a CAT token from claims.
+    /// Generates a CAT token from claims
     pub fn generate(self: *const Cat, claims: Claims, options: CatGenerateOptions) ![]const u8 {
-        // Use an arena allocator for all temporary allocations
         var arena = std.heap.ArenaAllocator.init(self.allocator);
         defer arena.deinit();
         const temp_allocator = arena.allocator();
 
-        // Create a new claims object with the arena allocator
         var claims_copy = Claims.init(temp_allocator);
-
-        // Copy all claims from the original
         var it = claims.claims.iterator();
         while (it.next()) |entry| {
             try claims_copy.setClaim(entry.key_ptr.*, entry.value_ptr.*);
         }
 
-        // Add a random CWT ID if requested
         if (options.generate_cwt_id and claims_copy.getCwtId() == null) {
             const cti = try util.generateRandomHex(temp_allocator, 16);
             try claims_copy.setCwtId(cti);
         }
 
-        // Generate the token based on the validation type
-        // The result is allocated with the original allocator, so it outlives the arena
-        const result = switch (options.validation_type) {
+        return switch (options.validation_type) {
             .Mac => try self.createMac(temp_allocator, claims_copy, options.kid, options.alg),
-            .Sign => return Error.Unexpected, // Not implemented
-            .None => return Error.Unexpected, // Not implemented
+            .Sign => return Error.Unexpected,
+            .None => return Error.Unexpected,
         };
-
-        return result;
     }
 
-    /// Validates a CAT token and returns the claims.
+    /// Validates a CAT token and returns the claims
     pub fn validate(self: *const Cat, token: []const u8, validation_type: CatValidationType, options: CatValidationOptions) !Claims {
-        // Use an arena allocator for temporary allocations during validation
         var arena = std.heap.ArenaAllocator.init(self.allocator);
         defer arena.deinit();
         const temp_allocator = arena.allocator();
 
-        // Decode the token from base64 (temporary allocation)
         const token_bytes = try util.fromBase64Url(temp_allocator, token);
 
-        // Validate the token based on the validation type
-        // The returned Claims uses self.allocator, so it outlives the arena
         var claims = switch (validation_type) {
             .Mac => try self.validateMac(temp_allocator, token_bytes),
-            .Sign => return Error.Unexpected, // Not implemented
-            .None => return Error.Unexpected, // Not implemented
+            .Sign => return Error.Unexpected,
+            .None => return Error.Unexpected,
         };
         errdefer claims.deinit();
 
-        // Validate the claims
         try self.validateClaims(claims, options);
-
         return claims;
     }
 
-    /// Creates a MAC (Message Authentication Code) for the given claims.
     fn createMac(self: *const Cat, temp_allocator: Allocator, claims: Claims, kid: []const u8, _: []const u8) ![]const u8 {
-        // Get the key for the given key ID
         const key = self.getKey(kid) orelse return Error.KeyNotFound;
-
-        // Serialize the claims to CBOR
         const claims_cbor = try claims.toCbor(temp_allocator);
 
-        // Create the protected header
         var protected_header = AutoHashMap(i64, []const u8).init(temp_allocator);
         const alg_str = try std.fmt.allocPrint(temp_allocator, "{d}", .{ALG_HS256});
         try protected_header.put(HEADER_ALG, alg_str);
 
-        // Create the unprotected header
         var unprotected_header = AutoHashMap(i64, []const u8).init(temp_allocator);
         try unprotected_header.put(HEADER_KID, kid);
 
-        // Create the COSE_Mac0 structure and compute the MAC
-        var cose_mac0 = CoseMac0.init(
-            temp_allocator,
-            protected_header,
-            unprotected_header,
-            claims_cbor,
-        );
-
+        var cose_mac0 = CoseMac0.init(temp_allocator, protected_header, unprotected_header, claims_cbor);
         try cose_mac0.createTag(key);
 
-        // Serialize the COSE_Mac0 structure
         var cose_mac0_cbor = ArrayList(u8){};
         try cose_mac0.toCbor(&cose_mac0_cbor);
 
-        // If CWT tag is expected, wrap the COSE_Mac0 in the appropriate tags
         if (self.expect_cwt_tag) {
             var result = ArrayList(u8){};
-
-            // First tag with COSE_Mac0 tag, then with CWT tag
             try self.serializeTaggedCbor(temp_allocator, TAG_COSE_MAC0, cose_mac0_cbor.items, &result);
 
             var tagged_cose_mac0_cbor = ArrayList(u8){};
             try self.serializeTaggedCbor(temp_allocator, TAG_CWT, result.items, &tagged_cose_mac0_cbor);
 
-            // Encode the result as base64 - this uses the original allocator so it outlives the arena
             return try util.toBase64NoPadding(self.allocator, tagged_cose_mac0_cbor.items);
         } else {
-            // Encode the result as base64 - this uses the original allocator so it outlives the arena
             return try util.toBase64NoPadding(self.allocator, cose_mac0_cbor.items);
         }
     }
 
-    /// Validates a MAC (Message Authentication Code) token and returns the claims.
     fn validateMac(self: *const Cat, temp_allocator: Allocator, token_bytes: []const u8) !Claims {
-        // Parse the token (using temp allocator for temporary data)
         var decoder = zbor.Decoder.init(token_bytes, temp_allocator);
         defer decoder.deinit();
 
-        // If CWT tag is expected, unwrap the CWT tag and COSE_Mac0 tag
         if (self.expect_cwt_tag) {
-            // Check for CWT tag
             const cwt_tag = try decoder.readTag();
-            if (cwt_tag != TAG_CWT) {
-                return Error.ExpectedCwtTag;
-            }
+            if (cwt_tag != TAG_CWT) return Error.ExpectedCwtTag;
 
-            // Check for COSE_Mac0 tag
             const cose_mac0_tag = try decoder.readTag();
-            if (cose_mac0_tag != TAG_COSE_MAC0) {
-                return Error.ExpectedCwtTag;
-            }
+            if (cose_mac0_tag != TAG_COSE_MAC0) return Error.ExpectedCwtTag;
         }
 
-        // Parse the COSE_Mac0 structure
         const array_len = try decoder.beginArray();
-        if (array_len != 4) {
-            return Error.CborDecodingError;
-        }
+        if (array_len != 4) return Error.CborDecodingError;
 
-        // Read the protected header (temporary)
         const protected_header = try decoder.readBytes(temp_allocator);
 
-        // Read the unprotected header
         const unprotected_header_type = try decoder.peekMajorType();
-        if (unprotected_header_type != .Map) {
-            return Error.CborDecodingError;
-        }
+        if (unprotected_header_type != .Map) return Error.CborDecodingError;
 
-        // Skip the unprotected header for now
         const unprotected_map_len = try decoder.beginMap();
         var i: usize = 0;
         while (i < unprotected_map_len) : (i += 1) {
-            // Skip the key
             _ = try decoder.skip();
-            // Skip the value
             _ = try decoder.skip();
         }
         try decoder.endMap();
 
-        // Read the payload (claims) - temporary
         const payload = try decoder.readBytes(temp_allocator);
-
-        // Read the tag - temporary
         const tag = try decoder.readBytes(temp_allocator);
-        _ = tag; // unused for now
+        _ = tag;
 
         try decoder.endArray();
 
-        // Parse the protected header to get the algorithm (if needed in future)
         var protected_decoder = zbor.Decoder.init(protected_header, temp_allocator);
         defer protected_decoder.deinit();
-
-        // Skip the protected header for now
         _ = try protected_decoder.skip();
 
-        // Parse the payload to get the claims
-        // This uses self.allocator so the Claims outlive the temp_allocator
         return try Claims.fromCbor(self.allocator, payload);
     }
 
-    /// Validates the claims against the provided options.
     fn validateClaims(_: *const Cat, claims: Claims, options: CatValidationOptions) !void {
-        // Check the issuer
         const issuer = claims.getIssuer() orelse return Error.InvalidIssuer;
-        if (!std.mem.eql(u8, issuer, options.issuer)) {
-            return Error.InvalidIssuer;
-        }
+        if (!std.mem.eql(u8, issuer, options.issuer)) return Error.InvalidIssuer;
 
-        // Check the expiration time
         if (claims.getExpiration()) |exp| {
-            if (exp < util.currentTimeSecs()) {
-                return Error.TokenExpired;
-            }
+            if (exp < util.currentTimeSecs()) return Error.TokenExpired;
         }
 
-        // Check the audience if provided
         if (options.audience) |audience| {
             if (claims.getAudience()) |aud| {
-                if (!std.mem.eql(u8, aud, audience)) {
-                    return Error.InvalidAudience;
-                }
+                if (!std.mem.eql(u8, aud, audience)) return Error.InvalidAudience;
             }
         }
 
-        // Check the not before time
         if (claims.getNotBefore()) |nbf| {
-            if (nbf > util.currentTimeSecs()) {
-                return Error.TokenNotActive;
-            }
+            if (nbf > util.currentTimeSecs()) return Error.TokenNotActive;
         }
 
         // TODO: Implement validation for URL, IP, and ASN
     }
 
-    /// Gets a key by its ID.
     fn getKey(self: *const Cat, kid: []const u8) ?[]const u8 {
         return self.keys.get(kid);
     }
 
-    /// Serializes a tagged CBOR value.
     fn serializeTaggedCbor(_: *const Cat, allocator: Allocator, tag: u64, data: []const u8, out: *ArrayList(u8)) !void {
         var encoder = zbor.Encoder.init(allocator);
         defer encoder.deinit();
-
         try encoder.pushTag(tag);
         try encoder.pushRaw(data);
-
         try out.appendSlice(allocator, encoder.finish());
     }
 };
