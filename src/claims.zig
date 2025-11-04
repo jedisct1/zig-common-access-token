@@ -352,6 +352,117 @@ pub const Claims = struct {
         } else null;
     }
 
+    /// Sets the CATH (HTTP Headers) claim with a map of header requirements
+    pub fn setCatH(self: *Claims, headers: AutoHashMap(u64, ClaimValue)) !void {
+        try self.setClaimOwned(LABEL_CATH, ClaimValue{ .Map = headers });
+    }
+
+    /// Gets the CATH claim as a map
+    pub fn getCatH(self: Claims) ?AutoHashMap(u64, ClaimValue) {
+        return if (self.claims.get(LABEL_CATH)) |value| switch (value) {
+            .Map => |map| map,
+            else => null,
+        } else null;
+    }
+
+    /// Sets the CATGEOCOORD (Geographic Coordinates) claim with a map containing lat, lon, optional radius
+    pub fn setCatGeoCoord(self: *Claims, coords: AutoHashMap(u64, ClaimValue)) !void {
+        try self.setClaimOwned(LABEL_CATGEOCOORD, ClaimValue{ .Map = coords });
+    }
+
+    /// Gets the CATGEOCOORD claim as a map
+    pub fn getCatGeoCoord(self: Claims) ?AutoHashMap(u64, ClaimValue) {
+        return if (self.claims.get(LABEL_CATGEOCOORD)) |value| switch (value) {
+            .Map => |map| map,
+            else => null,
+        } else null;
+    }
+
+    /// Sets the CATGEOALT (Altitude) claim - can be integer or map with min/max range
+    pub fn setCatGeoAlt(self: *Claims, value: ClaimValue) !void {
+        try self.setClaim(LABEL_CATGEOALT, value);
+    }
+
+    /// Gets the CATGEOALT claim
+    pub fn getCatGeoAlt(self: Claims) ?ClaimValue {
+        return self.claims.get(LABEL_CATGEOALT);
+    }
+
+    /// Sets the CATTPK (TLS Public Key pinning) claim - can be bytes or array of bytes
+    pub fn setCatTpk(self: *Claims, value: ClaimValue) !void {
+        try self.setClaim(LABEL_CATTPK, value);
+    }
+
+    /// Gets the CATTPK claim
+    pub fn getCatTpk(self: Claims) ?ClaimValue {
+        return self.claims.get(LABEL_CATTPK);
+    }
+
+    /// Sets the CATDPOP (DPoP configuration) claim with a map
+    pub fn setCatDpop(self: *Claims, config: AutoHashMap(u64, ClaimValue)) !void {
+        try self.setClaimOwned(LABEL_CATDPOP, ClaimValue{ .Map = config });
+    }
+
+    /// Gets the CATDPOP claim as a map
+    pub fn getCatDpop(self: Claims) ?AutoHashMap(u64, ClaimValue) {
+        return if (self.claims.get(LABEL_CATDPOP)) |value| switch (value) {
+            .Map => |map| map,
+            else => null,
+        } else null;
+    }
+
+    /// Sets the CATIF (conditional logic) claim with a map
+    pub fn setCatIf(self: *Claims, condition: AutoHashMap(u64, ClaimValue)) !void {
+        try self.setClaimOwned(LABEL_CATIF, ClaimValue{ .Map = condition });
+    }
+
+    /// Gets the CATIF claim as a map
+    pub fn getCatIf(self: Claims) ?AutoHashMap(u64, ClaimValue) {
+        return if (self.claims.get(LABEL_CATIF)) |value| switch (value) {
+            .Map => |map| map,
+            else => null,
+        } else null;
+    }
+
+    /// Sets the CATIFDATA (conditional data) claim with a map
+    pub fn setCatIfData(self: *Claims, data: AutoHashMap(u64, ClaimValue)) !void {
+        try self.setClaimOwned(LABEL_CATIFDATA, ClaimValue{ .Map = data });
+    }
+
+    /// Gets the CATIFDATA claim as a map
+    pub fn getCatIfData(self: Claims) ?AutoHashMap(u64, ClaimValue) {
+        return if (self.claims.get(LABEL_CATIFDATA)) |value| switch (value) {
+            .Map => |map| map,
+            else => null,
+        } else null;
+    }
+
+    /// Sets the CATR (renewal) claim with a map of renewal parameters
+    pub fn setCatR(self: *Claims, renewal: AutoHashMap(u64, ClaimValue)) !void {
+        try self.setClaimOwned(LABEL_CATR, ClaimValue{ .Map = renewal });
+    }
+
+    /// Gets the CATR claim as a map
+    pub fn getCatR(self: Claims) ?AutoHashMap(u64, ClaimValue) {
+        return if (self.claims.get(LABEL_CATR)) |value| switch (value) {
+            .Map => |map| map,
+            else => null,
+        } else null;
+    }
+
+    /// Sets the CATU (URI restrictions) claim with a map of URI component restrictions
+    pub fn setCatU(self: *Claims, uri_restrictions: AutoHashMap(u64, ClaimValue)) !void {
+        try self.setClaimOwned(LABEL_CATU, ClaimValue{ .Map = uri_restrictions });
+    }
+
+    /// Gets the CATU claim as a map
+    pub fn getCatU(self: Claims) ?AutoHashMap(u64, ClaimValue) {
+        return if (self.claims.get(LABEL_CATU)) |value| switch (value) {
+            .Map => |map| map,
+            else => null,
+        } else null;
+    }
+
     /// Sets a generic claim
     pub fn setClaim(self: *Claims, label: u64, value: ClaimValue) !void {
         if (self.claims.getPtr(label)) |old_value| {
