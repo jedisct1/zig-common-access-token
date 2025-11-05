@@ -8,6 +8,7 @@ const testing = std.testing;
 const Error = @import("error.zig").Error;
 const Claims = @import("claims.zig").Claims;
 const ClaimValue = @import("claims.zig").ClaimValue;
+const FingerprintType = @import("claims.zig").FingerprintType;
 const LABEL_CTI = @import("claims.zig").LABEL_CTI;
 const LABEL_ISS = @import("claims.zig").LABEL_ISS;
 const LABEL_AUD = @import("claims.zig").LABEL_AUD;
@@ -83,7 +84,7 @@ pub const CatValidationOptions = struct {
     token_seen_before: bool = false,
 
     /// TLS fingerprint type to validate against CATTPRINT claim (optional)
-    fingerprint_type: ?[]const u8 = null,
+    fingerprint_type: ?FingerprintType = null,
 
     /// TLS fingerprint value to validate against CATTPRINT claim (optional)
     fingerprint_value: ?[]const u8 = null,
@@ -266,7 +267,7 @@ pub const Cat = struct {
         // Validate CATTPRINT (TLS Fingerprint) claim if fingerprint type and value are provided
         if (options.fingerprint_type) |ftype| {
             if (options.fingerprint_value) |fvalue| {
-                try validation.validateCattprint(claims, ftype, fvalue);
+                try validation.validateCattprint(self.allocator, claims, ftype, fvalue);
             }
         }
 

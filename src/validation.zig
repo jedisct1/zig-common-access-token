@@ -6,6 +6,7 @@ const AutoHashMap = std.AutoHashMap;
 const Error = @import("error.zig").Error;
 const Claims = @import("claims.zig").Claims;
 const ClaimValue = @import("claims.zig").ClaimValue;
+const FingerprintType = @import("claims.zig").FingerprintType;
 const LABEL_CATU = @import("claims.zig").LABEL_CATU;
 const LABEL_CATM = @import("claims.zig").LABEL_CATM;
 const LABEL_CATREPLAY = @import("claims.zig").LABEL_CATREPLAY;
@@ -65,7 +66,7 @@ fn parseUri(allocator: Allocator, uri: []const u8) !ParsedUri {
     if (std.mem.indexOf(u8, uri, "://")) |scheme_end| {
         result.scheme = try allocator.dupe(u8, uri[0..scheme_end]);
 
-        var rest = uri[scheme_end + 3..];
+        var rest = uri[scheme_end + 3 ..];
 
         // Find path start
         if (std.mem.indexOfAny(u8, rest, "/?#")) |path_start| {
@@ -75,7 +76,7 @@ fn parseUri(allocator: Allocator, uri: []const u8) !ParsedUri {
             // Parse authority (host:port)
             if (std.mem.indexOf(u8, authority, ":")) |port_start| {
                 result.host = try allocator.dupe(u8, authority[0..port_start]);
-                const port_str = authority[port_start + 1..];
+                const port_str = authority[port_start + 1 ..];
                 result.port = try std.fmt.parseInt(u16, port_str, 10);
             } else {
                 result.host = try allocator.dupe(u8, authority);
@@ -86,7 +87,7 @@ fn parseUri(allocator: Allocator, uri: []const u8) !ParsedUri {
                 result.path = try allocator.dupe(u8, rest[0..query_start]);
 
                 // Check for fragment
-                const query_rest = rest[query_start + 1..];
+                const query_rest = rest[query_start + 1 ..];
                 if (std.mem.indexOf(u8, query_rest, "#")) |fragment_start| {
                     result.query = try allocator.dupe(u8, query_rest[0..fragment_start]);
                 } else {
@@ -108,15 +109,15 @@ fn parseUri(allocator: Allocator, uri: []const u8) !ParsedUri {
         // Find last slash for parent path
         if (std.mem.lastIndexOf(u8, path, "/")) |last_slash| {
             if (last_slash < path.len - 1) {
-                result.parent_path = try allocator.dupe(u8, path[0..last_slash + 1]);
-                result.filename = try allocator.dupe(u8, path[last_slash + 1..]);
+                result.parent_path = try allocator.dupe(u8, path[0 .. last_slash + 1]);
+                result.filename = try allocator.dupe(u8, path[last_slash + 1 ..]);
 
                 // Parse filename into stem and extension
                 if (result.filename) |filename| {
                     if (std.mem.lastIndexOf(u8, filename, ".")) |dot_pos| {
                         if (dot_pos > 0 and dot_pos < filename.len - 1) {
                             result.stem = try allocator.dupe(u8, filename[0..dot_pos]);
-                            result.extension = try allocator.dupe(u8, filename[dot_pos + 1..]);
+                            result.extension = try allocator.dupe(u8, filename[dot_pos + 1 ..]);
                         }
                     } else {
                         result.stem = try allocator.dupe(u8, filename);
@@ -197,14 +198,14 @@ pub fn validateCatu(allocator: Allocator, claims: Claims, uri: []const u8) !void
         // Get the actual URI component value
         const uri_component_value: ?[]const u8 = switch (component_key) {
             0 => parsed.scheme, // Scheme
-            1 => parsed.host,   // Host
+            1 => parsed.host, // Host
             2 => null, // Port - would need string conversion
-            3 => parsed.path,   // Path
-            4 => parsed.query,  // Query
+            3 => parsed.path, // Path
+            4 => parsed.query, // Query
             5 => parsed.parent_path, // ParentPath
-            6 => parsed.filename,    // Filename
-            7 => parsed.stem,        // Stem
-            8 => parsed.extension,   // Extension
+            6 => parsed.filename, // Filename
+            7 => parsed.stem, // Stem
+            8 => parsed.extension, // Extension
             else => null,
         };
 
@@ -302,7 +303,7 @@ pub fn validateCatreplay(claims: Claims, token_seen_before: bool) !void {
 }
 
 /// Validate CATTPRINT (TLS Fingerprint) claim
-pub fn validateCattprint(claims: Claims, fingerprint_type: []const u8, fingerprint_value: []const u8) !void {
+pub fn validateCattprint(allocator: Allocator, claims: Claims, fingerprint_type: FingerprintType, fingerprint_value: []const u8) !void {
     const cattprint_claim = claims.getClaim(LABEL_CATTPRINT) orelse return; // No CATTPRINT claim, nothing to validate
 
     const cattprint_map = switch (cattprint_claim) {
@@ -312,13 +313,21 @@ pub fn validateCattprint(claims: Claims, fingerprint_type: []const u8, fingerpri
 
     // Get the fingerprint type from the claim
     const claim_type = cattprint_map.get(TPRINT_PARAM_FINGERPRINT_TYPE) orelse return Error.InvalidTlsFingerprintClaim;
-    const claim_type_str = switch (claim_type) {
-        .String => |s| s,
+    const claim_type_int = switch (claim_type) {
+        .Integer => |i| i,
         else => return Error.InvalidTlsFingerprintClaim,
     };
 
-    // Compare fingerprint types (case-insensitive)
-    if (!std.ascii.eqlIgnoreCase(fingerprint_type, claim_type_str)) {
+    // Compare fingerprint types (as integers)
+    const fingerprint_type_int = @intFromEnum(fingerprint_type);
+    if (claim_type_int != fingerprint_type_int) {
+        // Convert claim_type_int to FingerprintType for human-readable name
+        // (For now just return the error, Zig doesn't have string formatting in errors like Rust)
+        _ = if (FingerprintType.fromI64(claim_type_int)) |ft|
+            ft.asStr()
+        else
+            "<unknown>";
+
         return Error.InvalidTlsFingerprintClaim;
     }
 
@@ -329,8 +338,15 @@ pub fn validateCattprint(claims: Claims, fingerprint_type: []const u8, fingerpri
         else => return Error.InvalidTlsFingerprintClaim,
     };
 
-    // Compare fingerprint values (case-insensitive)
-    if (!std.ascii.eqlIgnoreCase(fingerprint_value, claim_value_str)) {
+    // Compare fingerprint values (case-insensitive, using lowercase)
+    // Allocate temporary buffers for lowercase comparison
+    const claim_value_lower = try std.ascii.allocLowerString(allocator, claim_value_str);
+    defer allocator.free(claim_value_lower);
+
+    const fingerprint_value_lower = try std.ascii.allocLowerString(allocator, fingerprint_value);
+    defer allocator.free(fingerprint_value_lower);
+
+    if (!std.mem.eql(u8, claim_value_lower, fingerprint_value_lower)) {
         return Error.InvalidTlsFingerprintClaim;
     }
 }

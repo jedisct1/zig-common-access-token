@@ -17,6 +17,7 @@ pub const CatValidationOptions = cat.CatValidationOptions;
 pub const CatValidationType = cat.CatValidationType;
 pub const Claims = claims.Claims;
 pub const ClaimValue = claims.ClaimValue;
+pub const FingerprintType = claims.FingerprintType;
 pub const Error = errors.Error;
 
 test {

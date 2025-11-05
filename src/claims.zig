@@ -41,17 +41,61 @@ pub const LABEL_CATTPRINT: u64 = 324;
 pub const TPRINT_PARAM_FINGERPRINT_TYPE: u64 = 0;
 pub const TPRINT_PARAM_FINGERPRINT_VALUE: u64 = 1;
 
-// TLS Fingerprint type values
-pub const TPRINT_TYPE_JA3: []const u8 = "JA3";
-pub const TPRINT_TYPE_JA4: []const u8 = "JA4";
-pub const TPRINT_TYPE_JA4S: []const u8 = "JA4S";
-pub const TPRINT_TYPE_JA4H: []const u8 = "JA4H";
-pub const TPRINT_TYPE_JA4L: []const u8 = "JA4L";
-pub const TPRINT_TYPE_JA4X: []const u8 = "JA4X";
-pub const TPRINT_TYPE_JA4SSH: []const u8 = "JA4SSH";
-pub const TPRINT_TYPE_JA4T: []const u8 = "JA4T";
-pub const TPRINT_TYPE_JA4TS: []const u8 = "JA4TS";
-pub const TPRINT_TYPE_JA4TSCAN: []const u8 = "JA4TScan";
+/// TLS Fingerprint types
+pub const FingerprintType = enum(i64) {
+    JA3 = 0,
+    JA3S = 1,
+    JA4 = 2,
+    JA4S = 3,
+    JA4H = 4,
+    JA4L = 5,
+    JA4X = 6,
+    JA4SSH = 7,
+    JA4T = 8,
+    JA4TS = 9,
+    JA4TSCAN = 10,
+    JA4D = 11,
+    JA4D6 = 12,
+
+    /// Convert FingerprintType to string representation
+    pub fn asStr(self: FingerprintType) []const u8 {
+        return switch (self) {
+            .JA3 => "JA3",
+            .JA3S => "JA3S",
+            .JA4 => "JA4",
+            .JA4S => "JA4S",
+            .JA4H => "JA4H",
+            .JA4L => "JA4L",
+            .JA4X => "JA4X",
+            .JA4SSH => "JA4SSH",
+            .JA4T => "JA4T",
+            .JA4TS => "JA4TS",
+            .JA4TSCAN => "JA4TScan",
+            .JA4D => "JA4D",
+            .JA4D6 => "JA4D6",
+        };
+    }
+
+    /// Create FingerprintType from i64 value
+    pub fn fromI64(val: i64) ?FingerprintType {
+        return switch (val) {
+            0 => .JA3,
+            1 => .JA3S,
+            2 => .JA4,
+            3 => .JA4S,
+            4 => .JA4H,
+            5 => .JA4L,
+            6 => .JA4X,
+            7 => .JA4SSH,
+            8 => .JA4T,
+            9 => .JA4TS,
+            10 => .JA4TSCAN,
+            11 => .JA4D,
+            12 => .JA4D6,
+            else => null,
+        };
+    }
+};
 
 // URI component identifiers (for CATU claim)
 pub const URI_COMPONENT_SCHEME: u64 = 0;
@@ -486,6 +530,23 @@ pub const Claims = struct {
     /// Gets the CATU claim as a map
     pub fn getCatU(self: Claims) ?AutoHashMap(u64, ClaimValue) {
         return if (self.claims.get(LABEL_CATU)) |value| switch (value) {
+            .Map => |map| map,
+            else => null,
+        } else null;
+    }
+
+    /// Sets the CATTPRINT (TLS Fingerprint) claim with fingerprint type and value
+    pub fn setCatTPrint(self: *Claims, fingerprint_type: FingerprintType, fingerprint_value: []const u8) !void {
+        var cattprint_map = AutoHashMap(u64, ClaimValue).init(self.allocator);
+        try cattprint_map.put(TPRINT_PARAM_FINGERPRINT_TYPE, ClaimValue{ .Integer = @intFromEnum(fingerprint_type) });
+        const value_dup = try self.allocator.dupe(u8, fingerprint_value);
+        try cattprint_map.put(TPRINT_PARAM_FINGERPRINT_VALUE, ClaimValue{ .String = value_dup });
+        try self.setClaimOwned(LABEL_CATTPRINT, ClaimValue{ .Map = cattprint_map });
+    }
+
+    /// Gets the CATTPRINT claim as a map
+    pub fn getCatTPrint(self: Claims) ?AutoHashMap(u64, ClaimValue) {
+        return if (self.claims.get(LABEL_CATTPRINT)) |value| switch (value) {
             .Map => |map| map,
             else => null,
         } else null;

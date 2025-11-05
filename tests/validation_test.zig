@@ -71,7 +71,7 @@ test "CATM validation - valid method" {
 
     // Test valid methods
     try validation.validateCatm(claims, "GET");
-    try validation.validateCatm(claims, "post");  // Case insensitive
+    try validation.validateCatm(claims, "post"); // Case insensitive
 }
 
 test "CATM validation - invalid method" {
@@ -148,17 +148,16 @@ test "CATTPRINT validation - valid fingerprint" {
     var claims = Claims.init(allocator);
     defer claims.deinit();
 
-    // Create CATTPRINT claim: type=JA4, value=t13d1516h2_8daaf6152771_e5627efa2ab1
-    var cattprint_map = std.AutoHashMap(u64, ClaimValue).init(allocator);
-    try cattprint_map.put(0, ClaimValue{ .String = try allocator.dupe(u8, "JA4") });
-    try cattprint_map.put(1, ClaimValue{ .String = try allocator.dupe(u8, "t13d1516h2_8daaf6152771_e5627efa2ab1") });
+    const test_fingerprint_type = cat.FingerprintType.JA4;
+    const test_fingerprint_value = "t13d1516h2_8daaf6152771_b186095e22b6";
 
-    try claims.setClaim(324, ClaimValue{ .Map = cattprint_map });
+    // Create CATTPRINT claim using the new helper function
+    try claims.setCatTPrint(test_fingerprint_type, test_fingerprint_value);
 
     // Test valid fingerprint
-    try validation.validateCattprint(claims, "JA4", "t13d1516h2_8daaf6152771_e5627efa2ab1");
-    // Test case insensitive
-    try validation.validateCattprint(claims, "ja4", "T13D1516H2_8DAAF6152771_E5627EFA2AB1");
+    try validation.validateCattprint(allocator, claims, test_fingerprint_type, test_fingerprint_value);
+    // Test case insensitive (lowercase comparison)
+    try validation.validateCattprint(allocator, claims, test_fingerprint_type, "T13D1516H2_8DAAF6152771_B186095E22B6");
 }
 
 test "CATTPRINT validation - invalid fingerprint type" {
@@ -169,15 +168,14 @@ test "CATTPRINT validation - invalid fingerprint type" {
     var claims = Claims.init(allocator);
     defer claims.deinit();
 
-    // Create CATTPRINT claim: type=JA4
-    var cattprint_map = std.AutoHashMap(u64, ClaimValue).init(allocator);
-    try cattprint_map.put(0, ClaimValue{ .String = try allocator.dupe(u8, "JA4") });
-    try cattprint_map.put(1, ClaimValue{ .String = try allocator.dupe(u8, "t13d1516h2_8daaf6152771_e5627efa2ab1") });
+    const test_fingerprint_type = cat.FingerprintType.JA4;
+    const test_fingerprint_value = "t13d1516h2_8daaf6152771_b186095e22b6";
 
-    try claims.setClaim(324, ClaimValue{ .Map = cattprint_map });
+    // Create CATTPRINT claim with JA4
+    try claims.setCatTPrint(test_fingerprint_type, test_fingerprint_value);
 
-    // Test invalid fingerprint type
-    try testing.expectError(error.InvalidTlsFingerprintClaim, validation.validateCattprint(claims, "JA3", "t13d1516h2_8daaf6152771_e5627efa2ab1"));
+    // Test with different fingerprint type (JA3) - should fail
+    try testing.expectError(error.InvalidTlsFingerprintClaim, validation.validateCattprint(allocator, claims, cat.FingerprintType.JA3, test_fingerprint_value));
 }
 
 test "CATTPRINT validation - invalid fingerprint value" {
@@ -188,15 +186,15 @@ test "CATTPRINT validation - invalid fingerprint value" {
     var claims = Claims.init(allocator);
     defer claims.deinit();
 
+    const test_fingerprint_type = cat.FingerprintType.JA4;
+    const test_fingerprint_value = "t13d1516h2_8daaf6152771_b186095e22b6";
+
     // Create CATTPRINT claim
-    var cattprint_map = std.AutoHashMap(u64, ClaimValue).init(allocator);
-    try cattprint_map.put(0, ClaimValue{ .String = try allocator.dupe(u8, "JA4") });
-    try cattprint_map.put(1, ClaimValue{ .String = try allocator.dupe(u8, "t13d1516h2_8daaf6152771_e5627efa2ab1") });
+    try claims.setCatTPrint(test_fingerprint_type, test_fingerprint_value);
 
-    try claims.setClaim(324, ClaimValue{ .Map = cattprint_map });
-
-    // Test invalid fingerprint value
-    try testing.expectError(error.InvalidTlsFingerprintClaim, validation.validateCattprint(claims, "JA4", "wrong_fingerprint"));
+    // Test with wrong fingerprint value - should fail
+    const wrong_value = "t65a1516h2_8daaf6152771_b186095e22d3";
+    try testing.expectError(error.InvalidTlsFingerprintClaim, validation.validateCattprint(allocator, claims, test_fingerprint_type, wrong_value));
 }
 
 test "CATTPRINT validation - no claim present" {
@@ -208,7 +206,7 @@ test "CATTPRINT validation - no claim present" {
     defer claims.deinit();
 
     // No CATTPRINT claim - should pass validation
-    try validation.validateCattprint(claims, "JA4", "t13d1516h2_8daaf6152771_e5627efa2ab1");
+    try validation.validateCattprint(allocator, claims, cat.FingerprintType.JA4, "t13d1516h2_8daaf6152771_b186095e22b6");
 }
 
 test "CATU validation - parent_path component" {
