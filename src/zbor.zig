@@ -736,3 +736,80 @@ pub const Decoder = struct {
         }
     }
 };
+
+test "encode and decode negative integers" {
+    const allocator = testing.allocator;
+
+    const test_values = [_]i64{ -1, -10, -24, -25, -100, -256, -1000, -65536, -2147483648 };
+
+    for (test_values) |expected| {
+        var encoder = try Encoder.init(allocator);
+        defer encoder.deinit();
+
+        try encoder.pushInt(expected);
+        const cbor_data = encoder.finish();
+
+        var decoder = Decoder.init(cbor_data, allocator);
+        defer decoder.deinit();
+
+        const decoded = try decoder.readInt(i64);
+        try testing.expectEqual(expected, decoded);
+    }
+}
+
+test "encode and decode map with negative integer values" {
+    const allocator = testing.allocator;
+
+    var encoder = try Encoder.init(allocator);
+    defer encoder.deinit();
+
+    try encoder.beginMap(3);
+    try encoder.pushInt(@as(u64, 1));
+    try encoder.pushInt(@as(i64, -7)); // Like COSE algorithm ES256
+    try encoder.pushInt(@as(u64, 2));
+    try encoder.pushInt(@as(i64, 42));
+    try encoder.pushInt(@as(u64, 3));
+    try encoder.pushInt(@as(i64, -256));
+    try encoder.endMap();
+
+    const cbor_data = encoder.finish();
+
+    var decoder = Decoder.init(cbor_data, allocator);
+    defer decoder.deinit();
+
+    const map_len = try decoder.beginMap();
+    try testing.expectEqual(@as(usize, 3), map_len);
+
+    const key1 = try decoder.readInt(u64);
+    try testing.expectEqual(@as(u64, 1), key1);
+    const val1 = try decoder.readInt(i64);
+    try testing.expectEqual(@as(i64, -7), val1);
+
+    const key2 = try decoder.readInt(u64);
+    try testing.expectEqual(@as(u64, 2), key2);
+    const val2 = try decoder.readInt(i64);
+    try testing.expectEqual(@as(i64, 42), val2);
+
+    const key3 = try decoder.readInt(u64);
+    try testing.expectEqual(@as(u64, 3), key3);
+    const val3 = try decoder.readInt(i64);
+    try testing.expectEqual(@as(i64, -256), val3);
+
+    try decoder.endMap();
+}
+
+test "negative int in unsigned type fails" {
+    const allocator = testing.allocator;
+
+    var encoder = try Encoder.init(allocator);
+    defer encoder.deinit();
+
+    try encoder.pushInt(@as(i64, -1));
+    const cbor_data = encoder.finish();
+
+    var decoder = Decoder.init(cbor_data, allocator);
+    defer decoder.deinit();
+
+    const result = decoder.readInt(u64);
+    try testing.expectError(error.NegativeValueInUnsignedType, result);
+}

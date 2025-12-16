@@ -749,3 +749,25 @@ test "claims basic operations" {
     try testing.expectEqualStrings("test-audience", claims.getAudience().?);
     try testing.expectEqual(@as(i64, 1234567890), claims.getExpiration().?);
 }
+
+test "claims serialization with negative integers" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var claims = Claims.init(allocator);
+    defer claims.deinit();
+
+    try claims.setIssuer("test-issuer");
+    try claims.setExpiration(1234567890);
+    try claims.setCatReplay(-7); // Use negative value to test signed integer support
+
+    const cbor_data = try claims.toCbor(allocator);
+
+    var decoded_claims = try Claims.fromCbor(allocator, cbor_data);
+    defer decoded_claims.deinit();
+
+    try testing.expectEqualStrings("test-issuer", decoded_claims.getIssuer().?);
+    try testing.expectEqual(@as(i64, 1234567890), decoded_claims.getExpiration().?);
+    try testing.expectEqual(@as(i64, -7), decoded_claims.getCatReplay().?);
+}
