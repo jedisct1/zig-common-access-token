@@ -2,24 +2,18 @@ const std = @import("std");
 const Io = std.Io;
 const cat = @import("cat");
 
-pub fn main() !void {
-    const args = try std.process.argsAlloc(std.heap.page_allocator);
-    defer std.process.argsFree(std.heap.page_allocator, args);
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.gpa;
+    const io = init.io;
 
-    if (args.len < 2) {
-        std.debug.print("Usage: {s} <token>\n", .{args[0]});
+    var args_iter = try std.process.Args.Iterator.initAllocator(init.minimal.args, allocator);
+    defer args_iter.deinit();
+
+    const arg0 = args_iter.next() orelse "validate";
+    const token = args_iter.next() orelse {
+        std.debug.print("Usage: {s} <token>\n", .{arg0});
         return;
-    }
-
-    const token = args[1];
-
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
-
-    var threaded: Io.Threaded = .init(allocator, .{});
-    defer threaded.deinit();
-    const io = threaded.io();
+    };
 
     var arena = std.heap.ArenaAllocator.init(allocator);
     defer arena.deinit();

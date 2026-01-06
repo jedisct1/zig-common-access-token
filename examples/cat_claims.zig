@@ -2,14 +2,9 @@ const std = @import("std");
 const Io = std.Io;
 const cat = @import("cat");
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
-
-    var threaded: Io.Threaded = .init(allocator, .{});
-    defer threaded.deinit();
-    const io = threaded.io();
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.gpa;
+    const io = init.io;
 
     var arena = std.heap.ArenaAllocator.init(allocator);
     defer arena.deinit();
