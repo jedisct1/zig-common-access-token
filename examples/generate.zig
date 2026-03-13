@@ -19,6 +19,7 @@ pub fn main(init: std.process.Init) !void {
     const cat_options = cat.CatOptions{
         .keys = keys,
         .expect_cwt_tag = true,
+        .io = io,
     };
 
     var cat_instance = cat.Cat.init(allocator, cat_options);
@@ -30,7 +31,7 @@ pub fn main(init: std.process.Init) !void {
     try claims.setSubject("user123");
     try claims.setAudience("service");
 
-    const now = cat.util.currentTimeSecs();
+    const now = cat.util.currentTimeSecs(io);
     try claims.setExpiration(now + 120);
     try claims.setIssuedAt(now);
 

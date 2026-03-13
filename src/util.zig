@@ -1,8 +1,8 @@
 const std = @import("std");
 const base64 = std.base64;
 const time = std.time;
-const crypto = std.crypto;
 const testing = std.testing;
+const Io = std.Io;
 
 const Error = @import("error.zig").Error;
 
@@ -32,10 +32,10 @@ pub fn fromBase64Url(allocator: std.mem.Allocator, encoded: []const u8) ![]u8 {
 }
 
 /// Generates a random hex string of specified length
-pub fn generateRandomHex(allocator: std.mem.Allocator, bytes: usize) ![]u8 {
+pub fn generateRandomHex(allocator: std.mem.Allocator, io: Io, bytes: usize) ![]u8 {
     const random_bytes = try allocator.alloc(u8, bytes);
     defer allocator.free(random_bytes);
-    crypto.random.bytes(random_bytes);
+    io.random(random_bytes);
 
     const hex_str = try allocator.alloc(u8, bytes * 2);
     for (random_bytes, 0..) |byte, i| {
@@ -45,9 +45,9 @@ pub fn generateRandomHex(allocator: std.mem.Allocator, bytes: usize) ![]u8 {
 }
 
 /// Returns the current time in seconds since the Unix epoch
-pub fn currentTimeSecs() i64 {
-    const ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
-    return @intCast(ts.sec);
+pub fn currentTimeSecs(io: Io) i64 {
+    const ts = Io.Timestamp.now(io, .real);
+    return @intCast(@divFloor(ts.nanoseconds, time.ns_per_s));
 }
 
 /// Checks if a string is a valid hex string
@@ -92,13 +92,13 @@ test "random hex generation" {
     defer arena.deinit();
     const allocator = arena.allocator();
 
-    const hex = try generateRandomHex(allocator, 16);
+    const hex = try generateRandomHex(allocator, testing.io, 16);
     try testing.expectEqual(@as(usize, 32), hex.len);
     try testing.expect(isHex(hex));
 }
 
 test "current time" {
-    const now = currentTimeSecs();
+    const now = currentTimeSecs(testing.io);
     try testing.expect(now > 0);
 }
 

@@ -74,6 +74,7 @@ test "cat - token generation and validation" {
     const cat_options = cat.CatOptions{
         .keys = keys,
         .expect_cwt_tag = true,
+        .io = testing.io,
     };
 
     // Create a CAT instance
@@ -88,7 +89,7 @@ test "cat - token generation and validation" {
     try claims.setSubject("subject");
     try claims.setAudience("audience");
 
-    const now = util.currentTimeSecs();
+    const now = util.currentTimeSecs(testing.io);
     try claims.setExpiration(now + 120); // 2 minutes from now
     try claims.setIssuedAt(now);
 
@@ -138,6 +139,7 @@ test "cat - token validation with invalid issuer" {
     const cat_options = cat.CatOptions{
         .keys = keys,
         .expect_cwt_tag = true,
+        .io = testing.io,
     };
 
     // Create a CAT instance
@@ -152,7 +154,7 @@ test "cat - token validation with invalid issuer" {
     try claims.setSubject("subject");
     try claims.setAudience("audience");
 
-    const now = util.currentTimeSecs();
+    const now = util.currentTimeSecs(testing.io);
     try claims.setExpiration(now + 120); // 2 minutes from now
     try claims.setIssuedAt(now);
 
@@ -197,6 +199,7 @@ test "cat - token validation with expired token" {
     const cat_options = cat.CatOptions{
         .keys = keys,
         .expect_cwt_tag = true,
+        .io = testing.io,
     };
 
     // Create a CAT instance
@@ -211,7 +214,7 @@ test "cat - token validation with expired token" {
     try claims.setSubject("subject");
     try claims.setAudience("audience");
 
-    const now = util.currentTimeSecs();
+    const now = util.currentTimeSecs(testing.io);
     try claims.setExpiration(now - 120); // 2 minutes in the past (expired)
     try claims.setIssuedAt(now - 240);
 

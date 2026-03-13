@@ -28,6 +28,7 @@ pub fn main(init: std.process.Init) !void {
     const cat_options = cat.CatOptions{
         .keys = keys,
         .expect_cwt_tag = true,
+        .io = io,
     };
 
     var cat_instance = cat.Cat.init(allocator, cat_options);

@@ -1,5 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const Io = std.Io;
 const StringHashMap = std.StringHashMap;
 const AutoHashMap = std.AutoHashMap;
 const ArrayList = std.ArrayList;
@@ -43,6 +44,9 @@ pub const CatOptions = struct {
 
     /// Whether tokens should include the CWT tag
     expect_cwt_tag: bool,
+
+    /// I/O instance for system operations (random, time)
+    io: Io,
 };
 
 /// Options for generating a CAT token.
@@ -100,6 +104,7 @@ pub const Cat = struct {
     allocator: Allocator,
     keys: StringHashMap([]const u8),
     expect_cwt_tag: bool,
+    io: Io,
 
     /// Creates a new CAT instance.
     pub fn init(allocator: Allocator, options: CatOptions) Cat {
@@ -107,6 +112,7 @@ pub const Cat = struct {
             .allocator = allocator,
             .keys = options.keys,
             .expect_cwt_tag = options.expect_cwt_tag,
+            .io = options.io,
         };
     }
 
@@ -129,7 +135,7 @@ pub const Cat = struct {
         }
 
         if (options.generate_cwt_id and claims_copy.getCwtId() == null) {
-            const cti = try util.generateRandomHex(temp_allocator, 16);
+            const cti = try util.generateRandomHex(temp_allocator, self.io, 16);
             try claims_copy.setCwtId(cti);
         }
 
@@ -173,16 +179,16 @@ pub const Cat = struct {
         var cose_mac0 = CoseMac0.init(temp_allocator, protected_header, unprotected_header, claims_cbor);
         try cose_mac0.createTag(key);
 
-        var cose_mac0_cbor = ArrayList(u8){};
+        var cose_mac0_cbor = ArrayList(u8).empty;
         defer cose_mac0_cbor.deinit(temp_allocator);
         try cose_mac0.toCbor(&cose_mac0_cbor);
 
         if (self.expect_cwt_tag) {
-            var result = ArrayList(u8){};
+            var result = ArrayList(u8).empty;
             defer result.deinit(temp_allocator);
             try self.serializeTaggedCbor(temp_allocator, TAG_COSE_MAC0, cose_mac0_cbor.items, &result);
 
-            var tagged_cose_mac0_cbor = ArrayList(u8){};
+            var tagged_cose_mac0_cbor = ArrayList(u8).empty;
             defer tagged_cose_mac0_cbor.deinit(temp_allocator);
             try self.serializeTaggedCbor(temp_allocator, TAG_CWT, result.items, &tagged_cose_mac0_cbor);
 
@@ -238,7 +244,7 @@ pub const Cat = struct {
         if (!std.mem.eql(u8, issuer, options.issuer)) return Error.InvalidIssuer;
 
         if (claims.getExpiration()) |exp| {
-            if (exp < util.currentTimeSecs()) return Error.TokenExpired;
+            if (exp < util.currentTimeSecs(self.io)) return Error.TokenExpired;
         }
 
         if (options.audience) |audience| {
@@ -248,7 +254,7 @@ pub const Cat = struct {
         }
 
         if (claims.getNotBefore()) |nbf| {
-            if (nbf > util.currentTimeSecs()) return Error.TokenNotActive;
+            if (nbf > util.currentTimeSecs(self.io)) return Error.TokenNotActive;
         }
 
         // Validate CATU (URI) claim if URL is provided
@@ -299,6 +305,7 @@ test "Cat basic operations" {
     const cat_options = CatOptions{
         .keys = keys,
         .expect_cwt_tag = true,
+        .io = testing.io,
     };
 
     var cat = Cat.init(allocator, cat_options);

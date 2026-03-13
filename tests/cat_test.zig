@@ -32,6 +32,7 @@ test "cat initialization" {
     const cat_options = cat.CatOptions{
         .keys = keys,
         .expect_cwt_tag = true,
+        .io = testing.io,
     };
 
     var cat_instance = cat.Cat.init(allocator, cat_options);
@@ -55,6 +56,7 @@ test "token generation and validation" {
     const cat_options = cat.CatOptions{
         .keys = keys,
         .expect_cwt_tag = true,
+        .io = testing.io,
     };
 
     // Create a CAT instance
@@ -69,7 +71,7 @@ test "token generation and validation" {
     try claims.setSubject("test-subject");
     try claims.setAudience("test-audience");
 
-    const now = cat.util.currentTimeSecs();
+    const now = cat.util.currentTimeSecs(testing.io);
     try claims.setExpiration(now + 120); // 2 minutes from now
     try claims.setIssuedAt(now);
 
@@ -121,14 +123,14 @@ test "utility functions" {
     try testing.expectEqualStrings(test_data, decoded);
 
     // Test random hex generation
-    const hex = try cat.util.generateRandomHex(allocator, 16);
+    const hex = try cat.util.generateRandomHex(allocator, testing.io, 16);
     defer allocator.free(hex);
 
     try testing.expectEqual(@as(usize, 32), hex.len);
     try testing.expect(cat.util.isHex(hex));
 
     // Test current time
-    const now = cat.util.currentTimeSecs();
+    const now = cat.util.currentTimeSecs(testing.io);
     try testing.expect(now > 0);
 
     // Test hex to bytes

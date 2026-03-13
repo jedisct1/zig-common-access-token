@@ -574,7 +574,7 @@ pub const Decoder = struct {
         if (additional_info == AdditionalInfo.INDEFINITE) {
             self.indefinite_level += 1;
 
-            var result = std.ArrayList(u8){};
+            var result = std.ArrayList(u8).empty;
             errdefer result.deinit(allocator);
 
             while (true) {
@@ -615,7 +615,7 @@ pub const Decoder = struct {
         if (additional_info == AdditionalInfo.INDEFINITE) {
             self.indefinite_level += 1;
 
-            var result = std.ArrayList(u8){};
+            var result = std.ArrayList(u8).empty;
             errdefer result.deinit(allocator);
 
             while (true) {

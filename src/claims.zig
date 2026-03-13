@@ -153,7 +153,7 @@ pub const ClaimValue = union(enum) {
             .Integer => |int| ClaimValue{ .Integer = int },
             .Bytes => |bytes| ClaimValue{ .Bytes = try allocator.dupe(u8, bytes) },
             .Array => |array| blk: {
-                var new_array = ArrayList(ClaimValue){};
+                var new_array = ArrayList(ClaimValue).empty;
                 errdefer {
                     for (new_array.items) |*item| {
                         item.deinit(allocator);
@@ -354,7 +354,7 @@ pub const Claims = struct {
 
     /// Sets the CATNIP (Network IP) claim with an array of IP addresses/ranges
     pub fn setCatNip(self: *Claims, ips: []const []const u8) !void {
-        var array = ArrayList(ClaimValue){};
+        var array = ArrayList(ClaimValue).empty;
         for (ips) |ip| {
             const dup = try self.allocator.dupe(u8, ip);
             try array.append(self.allocator, ClaimValue{ .String = dup });
@@ -372,7 +372,7 @@ pub const Claims = struct {
 
     /// Sets the CATM (HTTP Methods) claim with an array of allowed methods
     pub fn setCatM(self: *Claims, methods: []const []const u8) !void {
-        var array = ArrayList(ClaimValue){};
+        var array = ArrayList(ClaimValue).empty;
         for (methods) |method| {
             const dup = try self.allocator.dupe(u8, method);
             try array.append(self.allocator, ClaimValue{ .String = dup });
@@ -390,7 +390,7 @@ pub const Claims = struct {
 
     /// Sets the CATALPN (TLS ALPN protocols) claim with an array of protocols
     pub fn setCatAlpn(self: *Claims, protocols: []const []const u8) !void {
-        var array = ArrayList(ClaimValue){};
+        var array = ArrayList(ClaimValue).empty;
         for (protocols) |protocol| {
             const dup = try self.allocator.dupe(u8, protocol);
             try array.append(self.allocator, ClaimValue{ .String = dup });
@@ -408,7 +408,7 @@ pub const Claims = struct {
 
     /// Sets the CATGEOISO3166 (country codes) claim with an array of ISO 3166 codes
     pub fn setCatGeoIso3166(self: *Claims, country_codes: []const []const u8) !void {
-        var array = ArrayList(ClaimValue){};
+        var array = ArrayList(ClaimValue).empty;
         for (country_codes) |code| {
             const dup = try self.allocator.dupe(u8, code);
             try array.append(self.allocator, ClaimValue{ .String = dup });
@@ -652,7 +652,7 @@ pub const Claims = struct {
                 },
                 .Array => {
                     const array_len = try decoder.beginArray();
-                    var array = ArrayList(ClaimValue){};
+                    var array = ArrayList(ClaimValue).empty;
                     errdefer {
                         for (array.items) |*item| {
                             item.deinit(allocator);

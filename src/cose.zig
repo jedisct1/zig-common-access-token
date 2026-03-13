@@ -70,11 +70,11 @@ pub const CoseMac0 = struct {
 
     /// Computes the HMAC-SHA256 MAC for this COSE_Mac0 structure.
     fn computeMac(self: *const CoseMac0, key: []const u8, out_tag: *[crypto.auth.hmac.sha2.HmacSha256.mac_length]u8) !void {
-        var protected_header_cbor = std.ArrayList(u8){};
+        var protected_header_cbor = std.ArrayList(u8).empty;
         defer protected_header_cbor.deinit(self.allocator);
         try serializeCbor(self.allocator, self.protected_header, &protected_header_cbor);
 
-        var mac_structure = std.ArrayList(u8){};
+        var mac_structure = std.ArrayList(u8).empty;
         defer mac_structure.deinit(self.allocator);
         try serializeMacStructure(
             self.allocator,
@@ -90,11 +90,11 @@ pub const CoseMac0 = struct {
 
     /// Serializes the COSE_Mac0 structure to CBOR
     pub fn toCbor(self: *const CoseMac0, out: *std.ArrayList(u8)) !void {
-        var protected_header_cbor = std.ArrayList(u8){};
+        var protected_header_cbor = std.ArrayList(u8).empty;
         defer protected_header_cbor.deinit(self.allocator);
         try serializeCbor(self.allocator, self.protected_header, &protected_header_cbor);
 
-        var unprotected_header_cbor = std.ArrayList(u8){};
+        var unprotected_header_cbor = std.ArrayList(u8).empty;
         defer unprotected_header_cbor.deinit(self.allocator);
         try serializeCbor(self.allocator, self.unprotected_header, &unprotected_header_cbor);
 
@@ -204,7 +204,7 @@ test "COSE_Mac0 basic operations" {
     try cose_mac0.createTag("key");
     try cose_mac0.verify("key");
 
-    var cbor = std.ArrayList(u8){};
+    var cbor = std.ArrayList(u8).empty;
     defer cbor.deinit(allocator);
 
     try cose_mac0.toCbor(&cbor);
