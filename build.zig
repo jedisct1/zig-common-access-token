@@ -105,16 +105,12 @@ pub fn build(b: *std.Build) void {
     generate_step.dependOn(&run_generate.step);
 
     const run_validate = b.addRunArtifact(validate_example);
-    if (b.args) |args| {
-        run_validate.addArgs(args);
-    }
+    run_validate.addPassthruArgs();
     const validate_step = b.step("validate", "Run the validate example");
     validate_step.dependOn(&run_validate.step);
 
     const run_interop = b.addRunArtifact(interop_example);
-    if (b.args) |args| {
-        run_interop.addArgs(args);
-    }
+    run_interop.addPassthruArgs();
     const interop_step = b.step("interop", "Run the interop example");
     interop_step.dependOn(&run_interop.step);
 
