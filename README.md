@@ -58,7 +58,7 @@ Add this library to your `build.zig.zon` file:
 ```zig
 .dependencies = .{
     .zig_cat = .{
-        .url = "https://github.com/yourusername/zig-cat/archive/refs/tags/v0.1.0.tar.gz",
+        .url = "https://github.com/jedisct1/zig-common-access-token/archive/refs/heads/main.tar.gz",
         .hash = "...",
     },
 },
