@@ -1,59 +1,73 @@
 # Common Access Token (CAT) for Zig
 
-A Zig implementation of the Common Access Token (CAT) specification with HMAC signatures.
+Create and validate Common Access Tokens (CAT) in Zig with HMAC signatures.
 
 ## What is CAT?
 
-Common Access Token (CAT) is a token format designed for authorization and authentication in distributed systems, particularly for media and content delivery applications. It provides a secure, compact, and efficient way to represent claims and authorization information between parties.
+CAT is a token format for authorization and authentication in distributed systems, especially media and content delivery applications. It gives you a secure, compact, and efficient way to pass claims and authorization information between parties.
 
-CAT is built on established standards:
-- Based on [CBOR Web Token (CWT)](https://tools.ietf.org/html/rfc8392) format
-- Uses [CBOR Object Signing and Encryption (COSE)](https://tools.ietf.org/html/rfc8152) for cryptographic operations
-- Provides a binary alternative to JWT with smaller token sizes and more efficient processing
+It's built on established standards:
+
+- It's based on the [CBOR Web Token (CWT)](https://tools.ietf.org/html/rfc8392) format.
+- It uses [CBOR Object Signing and Encryption (COSE)](https://tools.ietf.org/html/rfc8152) for cryptographic operations.
+- It's a binary alternative to JWT, with smaller tokens and more efficient processing.
 
 ## Overview
 
-This library provides a complete implementation for generating and validating Common Access Tokens (CAT) using HMAC signatures. It is designed to be interoperable with other implementations like [node-cat](https://github.com/Eyevinn/node-cat) and [common-access-token](https://github.com/fastly/rust-cat).
+This library fully implements CAT generation and validation with HMAC signatures. It's designed to work with other implementations, including:
 
-Key benefits of using CAT tokens:
-- Compact: Binary format results in smaller token sizes compared to text-based formats
-- Efficient: CBOR encoding/decoding is faster and requires less processing power
-- Secure: Built on established cryptographic standards
-- Extensible: Supports custom claims and extensions
+- [node-cat](https://github.com/Eyevinn/node-cat)
+- [common-access-token](https://github.com/fastly/rust-cat)
+
+Why use CAT tokens?
+
+- They're compact: the binary format makes tokens smaller than text-based formats.
+- They're efficient: CBOR encoding and decoding are faster and need less processing power.
+- They're secure: they use established cryptographic standards.
+- You can extend them with custom claims and extensions.
 
 ## Features
 
-- Token Operations:
-  - Generate CAT tokens with HMAC signatures (HS256)
-  - Validate CAT tokens with comprehensive security checks
-  - Support for token expiration and time-based validation
+- Tokens:
+  - Generate CAT tokens with HMAC signatures (HS256).
+  - Validate CAT tokens with thorough security checks.
+  - Check token expiration and other time-based rules.
 
-- Claims Support:
-  - Standard CWT claims (issuer, subject, audience, expiration, etc.)
-  - CAT-specific claims (version, renewal, usage, data, authorization)
-  - Custom claim extension capability
+- Claims:
+  - Standard CWT claims, including:
+    - Issuer
+    - Subject
+    - Audience
+    - Expiration
+  - CAT-specific claims:
+    - Version
+    - Renewal
+    - Usage
+    - Data
+    - Authorization
+  - Extend tokens with custom claims.
 
-- CBOR Implementation:
-  - High-performance CBOR encoding/decoding
-  - Support for all CBOR data types
-  - Support for indefinite-length arrays, maps, and strings
-  - Support for floating-point numbers
-  - Support for tagged values
+- CBOR:
+  - Fast CBOR encoding and decoding.
+  - All CBOR data types.
+  - Indefinite-length arrays, maps, and strings.
+  - Floating-point numbers.
+  - Tagged values.
 
-- Error Handling:
-  - Comprehensive error types
-  - Detailed error messages
-  - Error context information
-  - Error recovery mechanisms
+- Errors:
+  - A full set of error types.
+  - Detailed error messages.
+  - Context about errors.
+  - Ways to recover from errors.
 
 - Integration:
-  - Interoperability with other CAT implementations
-  - Easy integration with Zig applications
-  - Comprehensive documentation and examples
+  - Works with other CAT implementations.
+  - Easy to add to your Zig applications.
+  - Full documentation and examples.
 
 ## Installation
 
-Add this library to your `build.zig.zon` file:
+Add the library to your `build.zig.zon` file:
 
 ```zig
 .dependencies = .{
@@ -76,9 +90,7 @@ exe.addModule("cat", zig_cat.module("cat"));
 
 ## Usage
 
-### Token Generation
-
-This example demonstrates how to create a CAT token with standard claims:
+### Create a token
 
 ```zig
 const std = @import("std");
@@ -134,7 +146,9 @@ pub fn main() !void {
 }
 ```
 
-### Token Validation
+This creates a CAT token with standard claims.
+
+### Validate a token
 
 ```zig
 const std = @import("std");
@@ -187,15 +201,15 @@ pub fn main() !void {
 
 ## Examples
 
-The library includes several ready-to-use examples in the `examples/` directory:
+You'll find ready-to-use examples in the `examples/` directory:
 
-- generate.zig: Demonstrates basic token generation with standard claims
-- validate.zig: Shows how to validate tokens and extract claims
-- interop.zig: Tests interoperability with the NodeJS implementation (node-cat)
-- cat_claims.zig: Demonstrates using CAT-specific claims for advanced use cases
-- minimal.zig: Simple example showing basic base64 encoding utilities
+- generate.zig: Create a basic token with standard claims.
+- validate.zig: Validate tokens and read their claims.
+- interop.zig: Test interoperability with the NodeJS implementation (node-cat).
+- cat_claims.zig: Use CAT-specific claims for more advanced use cases.
+- minimal.zig: Try the basic base64 encoding utilities.
 
-To run an example:
+Run them with:
 
 ```bash
 # Generate a token
@@ -214,31 +228,31 @@ zig build cat_claims
 zig build minimal
 ```
 
-## Security Considerations
+## Security
 
-When using CAT tokens in your applications, keep these security best practices in mind:
+Keep these security practices in mind when you use CAT tokens in your applications:
 
-1. Key Management:
-   - Store signing keys securely
-   - Rotate keys periodically
-   - Use different keys for different environments
+1. Keys:
+   - Store your signing keys securely.
+   - Rotate your keys periodically.
+   - Use different keys for different environments.
 
-2. Token Validation:
-   - Always validate tokens before trusting their contents
-   - Check expiration times
-   - Verify the issuer and audience claims
+2. Validation:
+   - Always validate tokens before you trust their contents.
+   - Check expiration times.
+   - Verify the issuer and audience claims.
 
-3. Token Lifetime:
-   - Use short-lived tokens when possible
-   - For longer sessions, consider refresh token patterns
+3. Token lifetime:
+   - Use short-lived tokens when you can.
+   - For longer sessions, consider a refresh token pattern.
 
 4. Claims:
-   - Only include necessary information in tokens
-   - Be cautious with sensitive data in claims
+   - Only put information you need in tokens.
+   - Be careful with sensitive data in claims.
 
 ## Compatibility
 
-This library is designed to be interoperable with other CAT implementations:
+The library is designed to work with other CAT implementations:
 
 - [node-cat](https://github.com/Eyevinn/node-cat): The NodeJS reference implementation
 - [common-access-token](https://github.com/fastly/rust-cat): The Rust implementation
@@ -246,4 +260,4 @@ This library is designed to be interoperable with other CAT implementations:
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project uses the MIT License. See the LICENSE file for details.
