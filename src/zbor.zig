@@ -39,8 +39,7 @@ pub const SimpleValue = struct {
     pub const UNDEFINED: u8 = 23;
 };
 
-/// Maximum nesting of arrays, maps and tags accepted when decoding.
-/// Untrusted input must not be able to exhaust the stack.
+/// How deep arrays, maps and tags can nest, so that hostile input can't exhaust the stack.
 pub const max_nesting_depth = 32;
 
 pub const Encoder = struct {
@@ -185,8 +184,7 @@ pub const Encoder = struct {
         }
     }
 
-    /// Encodes a float with the shortest width that keeps its exact value.
-    /// This is the preferred serialization of RFC 8949, Section 4.2.2.
+    /// Encodes a float in the smallest size that keeps its exact value, as RFC 8949 recommends.
     pub fn pushFloatShortest(self: *Encoder, value: f64) !void {
         const half: f16 = @floatCast(value);
         if (std.math.isNan(value) or half == value) return self.pushFloat(half);
@@ -380,6 +378,35 @@ pub const Decoder = struct {
 
     pub fn endMap(self: *Decoder) !void {
         try self.endContainer();
+    }
+
+    /// Walks the items of an array, or the entries of a map, whether its length is definite or not
+    pub const Items = struct {
+        remaining: ?usize,
+
+        /// Tells whether another item follows. At the end of an indefinite-length container, it also reads the break.
+        pub fn next(self: *Items, decoder: *Decoder) !bool {
+            if (self.remaining) |*count| {
+                if (count.* == 0) return false;
+                count.* -= 1;
+                return true;
+            }
+            if (!try decoder.isBreakCode()) return true;
+            try decoder.readBreak();
+            return false;
+        }
+    };
+
+    pub fn arrayItems(self: *Decoder) !Items {
+        const indefinite = try self.peekAdditionalInfo() == AdditionalInfo.INDEFINITE;
+        const len = try self.beginArray();
+        return .{ .remaining = if (indefinite) null else len };
+    }
+
+    pub fn mapItems(self: *Decoder) !Items {
+        const indefinite = try self.peekAdditionalInfo() == AdditionalInfo.INDEFINITE;
+        const len = try self.beginMap();
+        return .{ .remaining = if (indefinite) null else len };
     }
 
     fn endContainer(self: *Decoder) !void {
@@ -596,7 +623,7 @@ pub const Decoder = struct {
                     break;
                 }
 
-                // Chunks must be definite-length strings, so they cannot nest.
+                // Chunks can't be indefinite-length themselves, so they never nest.
                 if (try self.peekAdditionalInfo() == AdditionalInfo.INDEFINITE) {
                     return error.InvalidIndefiniteChunk;
                 }

@@ -8,6 +8,7 @@ const testing = std.testing;
 const Error = @import("error.zig").Error;
 const zbor = @import("zbor.zig");
 const util = @import("util.zig");
+const moqt = @import("moqt.zig");
 
 pub const LABEL_ISS: u64 = 1;
 pub const LABEL_SUB: u64 = 2;
@@ -36,6 +37,10 @@ pub const LABEL_CATDPOP: u64 = 321;
 pub const LABEL_CATIF: u64 = 322;
 pub const LABEL_CATR: u64 = 323;
 pub const LABEL_CATTPRINT: u64 = 324;
+
+// IANA hasn't assigned these yet. They come from the draft-ietf-moq-c4m test vectors, and may change.
+pub const LABEL_MOQT: u64 = 327;
+pub const LABEL_MOQT_REVAL: u64 = 328;
 
 // TLS Fingerprint parameter labels (for CATTPRINT claim)
 pub const TPRINT_PARAM_FINGERPRINT_TYPE: u64 = 0;
@@ -116,12 +121,16 @@ pub const URI_COMPONENT_EXTENSION: u64 = 8;
 /// - Bytes for binary data
 /// - Arrays for lists of values
 /// - Maps for nested structures
+/// - Floats for non-integer numbers
+/// - Null for CBOR nil
 pub const ClaimValue = union(enum) {
     String: []const u8,
     Integer: i64,
     Bytes: []const u8,
     Array: ArrayList(ClaimValue),
     Map: AutoHashMap(u64, ClaimValue),
+    Float: f64,
+    Null,
 
     /// Frees memory associated with the claim value
     pub fn deinit(self: *ClaimValue, allocator: Allocator) void {
@@ -142,8 +151,17 @@ pub const ClaimValue = union(enum) {
                 }
                 map.deinit();
             },
-            .Integer => {},
+            .Integer, .Float, .Null => {},
         }
+    }
+
+    /// Gives the value as a number, for claims that can be an integer or a float
+    pub fn asNumber(self: ClaimValue) ?f64 {
+        return switch (self) {
+            .Integer => |int| @floatFromInt(int),
+            .Float => |float| float,
+            else => null,
+        };
     }
 
     /// Creates a deep clone of the claim value
@@ -151,6 +169,8 @@ pub const ClaimValue = union(enum) {
         return switch (self) {
             .String => |str| ClaimValue{ .String = try allocator.dupe(u8, str) },
             .Integer => |int| ClaimValue{ .Integer = int },
+            .Float => |float| ClaimValue{ .Float = float },
+            .Null => .Null,
             .Bytes => |bytes| ClaimValue{ .Bytes = try allocator.dupe(u8, bytes) },
             .Array => |array| blk: {
                 var new_array = ArrayList(ClaimValue).empty;
@@ -230,7 +250,7 @@ pub const Claims = struct {
     }
 
     fn setIntClaim(self: *Claims, label: u64, value: i64) !void {
-        try self.claims.put(label, ClaimValue{ .Integer = value });
+        try self.setClaimOwned(label, ClaimValue{ .Integer = value });
     }
 
     fn getIntClaim(self: Claims, label: u64) ?i64 {
@@ -538,7 +558,7 @@ pub const Claims = struct {
     /// Sets the CATTPRINT (TLS Fingerprint) claim with fingerprint type and value
     pub fn setCatTPrint(self: *Claims, fingerprint_type: FingerprintType, fingerprint_value: []const u8) !void {
         var cattprint_map = AutoHashMap(u64, ClaimValue).init(self.allocator);
-        try cattprint_map.put(TPRINT_PARAM_FINGERPRINT_TYPE, ClaimValue{ .Integer = @intFromEnum(fingerprint_type) });
+        try cattprint_map.put(TPRINT_PARAM_FINGERPRINT_TYPE, ClaimValue{ .Integer = @backingInt(fingerprint_type) });
         const value_dup = try self.allocator.dupe(u8, fingerprint_value);
         try cattprint_map.put(TPRINT_PARAM_FINGERPRINT_VALUE, ClaimValue{ .String = value_dup });
         try self.setClaimOwned(LABEL_CATTPRINT, ClaimValue{ .Map = cattprint_map });
@@ -550,6 +570,30 @@ pub const Claims = struct {
             .Map => |map| map,
             else => null,
         } else null;
+    }
+
+    /// Sets the moqt claim, which limits the MoQT actions the token allows
+    pub fn setMoqt(self: *Claims, scopes: []const moqt.Scope) !void {
+        var value = try moqt.toClaimValue(self.allocator, scopes);
+        errdefer value.deinit(self.allocator);
+        try self.setClaimOwned(LABEL_MOQT, value);
+    }
+
+    /// Parses the moqt claim, if there is one. Call `deinit` on the result.
+    pub fn getMoqt(self: Claims, allocator: Allocator) !?moqt.Claim {
+        const value = self.claims.get(LABEL_MOQT) orelse return null;
+        return try moqt.Claim.parse(allocator, value);
+    }
+
+    /// Sets the moqt-reval claim: how often, in seconds, relays must revalidate the token for ongoing streams
+    pub fn setMoqtReval(self: *Claims, seconds: u32) !void {
+        try self.setIntClaim(LABEL_MOQT_REVAL, seconds);
+    }
+
+    /// Gets the moqt-reval interval in seconds, or null if the token must not be revalidated
+    pub fn getMoqtReval(self: Claims) !?f64 {
+        const value = self.claims.get(LABEL_MOQT_REVAL) orelse return null;
+        return moqt.parseReval(value);
     }
 
     /// Sets a generic claim
@@ -599,6 +643,8 @@ pub const Claims = struct {
                 }
                 try encoder.endMap();
             },
+            .Float => |float| try encoder.pushFloatShortest(float),
+            .Null => try encoder.pushNull(),
         }
     }
 
@@ -624,110 +670,61 @@ pub const Claims = struct {
 
     /// Deserializes claims from CBOR
     pub fn fromCbor(allocator: Allocator, cbor_data: []const u8) !Claims {
-        var claims = Claims.init(allocator);
-        errdefer claims.deinit();
-
         var decoder = zbor.Decoder.init(cbor_data, allocator);
         defer decoder.deinit();
 
-        const map_len = try decoder.beginMap();
+        if (try decoder.peekMajorType() != .Map) return Error.CborDecodingError;
+        const value = try decodeClaimValue(allocator, &decoder, 0);
+        return Claims{ .allocator = allocator, .claims = value.Map };
+    }
 
-        var i: usize = 0;
-        while (i < map_len) : (i += 1) {
-            const label = try decoder.readInt(u64);
-            const major_type = try decoder.peekMajorType();
+    fn decodeClaimValue(allocator: Allocator, decoder: *zbor.Decoder, depth: usize) !ClaimValue {
+        if (depth > zbor.max_nesting_depth) return Error.CborDecodingError;
 
-            switch (major_type) {
-                .TextString => {
-                    const str = try decoder.readText(allocator);
-                    try claims.setClaimOwned(label, ClaimValue{ .String = str });
+        switch (try decoder.peekMajorType()) {
+            .TextString => return ClaimValue{ .String = try decoder.readText(allocator) },
+            .UnsignedInt, .NegativeInt => return ClaimValue{ .Integer = try decoder.readInt(i64) },
+            .ByteString => return ClaimValue{ .Bytes = try decoder.readBytes(allocator) },
+            .Array => {
+                var array = ClaimValue{ .Array = .empty };
+                errdefer array.deinit(allocator);
+
+                var items = try decoder.arrayItems();
+                while (try items.next(decoder)) {
+                    var item = try decodeClaimValue(allocator, decoder, depth + 1);
+                    errdefer item.deinit(allocator);
+                    try array.Array.append(allocator, item);
+                }
+                return array;
+            },
+            .Map => {
+                var map = ClaimValue{ .Map = .init(allocator) };
+                errdefer map.deinit(allocator);
+
+                var items = try decoder.mapItems();
+                while (try items.next(decoder)) {
+                    const label = try decoder.readInt(u64);
+                    var item = try decodeClaimValue(allocator, decoder, depth + 1);
+                    errdefer item.deinit(allocator);
+
+                    const entry = try map.Map.getOrPut(label);
+                    if (entry.found_existing) entry.value_ptr.deinit(allocator);
+                    entry.value_ptr.* = item;
+                }
+                return map;
+            },
+            .Simple => switch (try decoder.peekAdditionalInfo()) {
+                zbor.SimpleValue.NULL => {
+                    try decoder.readNull();
+                    return .Null;
                 },
-                .UnsignedInt, .NegativeInt => {
-                    const int = try decoder.readInt(i64);
-                    try claims.setClaimOwned(label, ClaimValue{ .Integer = int });
-                },
-                .ByteString => {
-                    const bytes = try decoder.readBytes(allocator);
-                    try claims.setClaimOwned(label, ClaimValue{ .Bytes = bytes });
-                },
-                .Array => {
-                    const array_len = try decoder.beginArray();
-                    var array = ArrayList(ClaimValue).empty;
-                    errdefer {
-                        for (array.items) |*item| {
-                            item.deinit(allocator);
-                        }
-                        array.deinit(allocator);
-                    }
-
-                    var j: usize = 0;
-                    while (j < array_len) : (j += 1) {
-                        const item_major_type = try decoder.peekMajorType();
-
-                        switch (item_major_type) {
-                            .TextString => {
-                                const str = try decoder.readText(allocator);
-                                try array.append(allocator, ClaimValue{ .String = str });
-                            },
-                            .UnsignedInt, .NegativeInt => {
-                                const int = try decoder.readInt(i64);
-                                try array.append(allocator, ClaimValue{ .Integer = int });
-                            },
-                            .ByteString => {
-                                const bytes = try decoder.readBytes(allocator);
-                                try array.append(allocator, ClaimValue{ .Bytes = bytes });
-                            },
-                            else => return Error.CborDecodingError,
-                        }
-                    }
-
-                    try decoder.endArray();
-                    try claims.setClaimOwned(label, ClaimValue{ .Array = array });
-                },
-                .Map => {
-                    const map_len2 = try decoder.beginMap();
-                    var map = AutoHashMap(u64, ClaimValue).init(allocator);
-                    errdefer {
-                        var map_it = map.iterator();
-                        while (map_it.next()) |map_entry| {
-                            var map_value = map_entry.value_ptr.*;
-                            map_value.deinit(allocator);
-                        }
-                        map.deinit();
-                    }
-
-                    var j: usize = 0;
-                    while (j < map_len2) : (j += 1) {
-                        const map_label = try decoder.readInt(u64);
-                        const item_major_type = try decoder.peekMajorType();
-
-                        switch (item_major_type) {
-                            .TextString => {
-                                const str = try decoder.readText(allocator);
-                                try map.put(map_label, ClaimValue{ .String = str });
-                            },
-                            .UnsignedInt, .NegativeInt => {
-                                const int = try decoder.readInt(i64);
-                                try map.put(map_label, ClaimValue{ .Integer = int });
-                            },
-                            .ByteString => {
-                                const bytes = try decoder.readBytes(allocator);
-                                try map.put(map_label, ClaimValue{ .Bytes = bytes });
-                            },
-                            else => return Error.CborDecodingError,
-                        }
-                    }
-
-                    try decoder.endMap();
-                    try claims.setClaimOwned(label, ClaimValue{ .Map = map });
+                zbor.AdditionalInfo.TWO_BYTES, zbor.AdditionalInfo.FOUR_BYTES, zbor.AdditionalInfo.EIGHT_BYTES => {
+                    return ClaimValue{ .Float = try decoder.readFloat(f64) };
                 },
                 else => return Error.CborDecodingError,
-            }
+            },
+            else => return Error.CborDecodingError,
         }
-
-        try decoder.endMap();
-
-        return claims;
     }
 };
 

@@ -55,6 +55,9 @@ pub const Error = error{
     InvalidMethodClaim,
     TokenReplayProhibited,
     InvalidTlsFingerprintClaim,
+    InvalidMoqtClaim,
+    MoqtNotAuthorized,
+    MoqtRevalidationUnsupported,
 
     // Token format errors
     InvalidTokenFormat,
@@ -120,6 +123,9 @@ pub fn errorToString(err: Error) []const u8 {
         Error.InvalidMethodClaim => "Invalid HTTP method claim",
         Error.TokenReplayProhibited => "Token replay prohibited",
         Error.InvalidTlsFingerprintClaim => "Invalid TLS fingerprint claim",
+        Error.InvalidMoqtClaim => "Invalid MoQT claim",
+        Error.MoqtNotAuthorized => "MoQT action not authorized",
+        Error.MoqtRevalidationUnsupported => "MoQT revalidation interval not supported",
         Error.InvalidTokenFormat => "Invalid token format",
         Error.InvalidTokenStructure => "Invalid token structure",
         Error.InvalidTokenHeader => "Invalid token header",

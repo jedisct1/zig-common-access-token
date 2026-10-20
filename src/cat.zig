@@ -10,12 +10,14 @@ const Error = @import("error.zig").Error;
 const Claims = @import("claims.zig").Claims;
 const ClaimValue = @import("claims.zig").ClaimValue;
 const FingerprintType = @import("claims.zig").FingerprintType;
+const moqt = @import("moqt.zig");
 const LABEL_CTI = @import("claims.zig").LABEL_CTI;
 const LABEL_ISS = @import("claims.zig").LABEL_ISS;
 const LABEL_AUD = @import("claims.zig").LABEL_AUD;
 const LABEL_EXP = @import("claims.zig").LABEL_EXP;
 const LABEL_NBF = @import("claims.zig").LABEL_NBF;
 const CoseMac0 = @import("cose.zig").CoseMac0;
+const cose = @import("cose.zig");
 const ALG_HS256 = @import("cose.zig").ALG_HS256;
 const HEADER_ALG = @import("cose.zig").HEADER_ALG;
 const HEADER_KID = @import("cose.zig").HEADER_KID;
@@ -92,6 +94,12 @@ pub const CatValidationOptions = struct {
 
     /// TLS fingerprint value to validate against CATTPRINT claim (optional)
     fingerprint_value: ?[]const u8 = null,
+
+    /// MoQT request to authorize with the moqt claim (optional). When set, tokens without a moqt claim are rejected.
+    moqt_request: ?moqt.Request = null,
+
+    /// Shortest moqt-reval interval, in seconds, that this relay can honor. Null means it can't revalidate tokens at all.
+    moqt_min_reval_interval: ?u32 = null,
 };
 
 /// Common Access Token (CAT) validator and generator.
@@ -215,36 +223,46 @@ pub const Cat = struct {
 
         const protected_header = try decoder.readBytes(temp_allocator);
 
-        const unprotected_header_type = try decoder.peekMajorType();
-        if (unprotected_header_type != .Map) return Error.CborDecodingError;
-
-        const unprotected_map_len = try decoder.beginMap();
-        var i: usize = 0;
-        while (i < unprotected_map_len) : (i += 1) {
-            _ = try decoder.skip();
-            _ = try decoder.skip();
-        }
-        try decoder.endMap();
+        const unprotected = try cose.readHeader(temp_allocator, &decoder);
 
         const payload = try decoder.readBytes(temp_allocator);
         const tag = try decoder.readBytes(temp_allocator);
-        _ = tag;
 
         try decoder.endArray();
 
-        var protected_decoder = zbor.Decoder.init(protected_header, temp_allocator);
-        defer protected_decoder.deinit();
-        _ = try protected_decoder.skip();
+        // An empty protected header is a zero-length byte string, not an encoded empty map.
+        var protected: cose.Header = .{};
+        if (protected_header.len > 0) {
+            var protected_decoder = zbor.Decoder.init(protected_header, temp_allocator);
+            defer protected_decoder.deinit();
+            protected = try cose.readHeader(temp_allocator, &protected_decoder);
+        }
+
+        // Only a protected algorithm can be trusted, since the MAC doesn't cover the unprotected header.
+        const alg = protected.alg orelse return Error.InvalidTokenHeader;
+        if (alg != ALG_HS256) return Error.UnsupportedAlgorithm;
+
+        const key = try self.findKey(protected.kid orelse unprotected.kid);
+        try cose.verifyTag(temp_allocator, protected_header, payload, tag, key);
 
         return try Claims.fromCbor(self.allocator, payload);
+    }
+
+    /// A token without a key ID can only be checked when there's a single key to try.
+    fn findKey(self: *const Cat, kid: ?[]const u8) ![]const u8 {
+        if (kid) |id| return self.getKey(id) orelse Error.KeyNotFound;
+        if (self.keys.count() != 1) return Error.KeyNotFound;
+        var it = self.keys.valueIterator();
+        return it.next().?.*;
     }
 
     fn validateClaims(self: *const Cat, claims: Claims, options: CatValidationOptions) !void {
         const issuer = claims.getIssuer() orelse return Error.InvalidIssuer;
         if (!std.mem.eql(u8, issuer, options.issuer)) return Error.InvalidIssuer;
 
-        if (claims.getExpiration()) |exp| {
-            if (exp < util.currentTimeSecs(self.io)) return Error.TokenExpired;
+        const now: f64 = @floatFromInt(util.currentTimeSecs(self.io));
+        if (try numericDate(claims, LABEL_EXP)) |exp| {
+            if (exp < now) return Error.TokenExpired;
         }
 
         if (options.audience) |audience| {
@@ -253,8 +271,8 @@ pub const Cat = struct {
             }
         }
 
-        if (claims.getNotBefore()) |nbf| {
-            if (nbf > util.currentTimeSecs(self.io)) return Error.TokenNotActive;
+        if (try numericDate(claims, LABEL_NBF)) |nbf| {
+            if (nbf > now) return Error.TokenNotActive;
         }
 
         // Validate CATU (URI) claim if URL is provided
@@ -277,6 +295,10 @@ pub const Cat = struct {
             }
         }
 
+        if (options.moqt_request) |request| {
+            try validation.validateMoqt(self.allocator, claims, request, options.moqt_min_reval_interval);
+        }
+
         _ = options.ip;
         _ = options.asn;
     }
@@ -293,6 +315,14 @@ pub const Cat = struct {
         try out.appendSlice(allocator, encoder.finish());
     }
 };
+
+/// RFC 8392 lets a NumericDate be an integer or a float
+fn numericDate(claims: Claims, label: u64) !?f64 {
+    const value = claims.getClaim(label) orelse return null;
+    const date = value.asNumber() orelse return Error.InvalidClaimType;
+    if (std.math.isNan(date)) return Error.InvalidClaimValue;
+    return date;
+}
 
 test "Cat basic operations" {
     var arena = std.heap.ArenaAllocator.init(testing.allocator);

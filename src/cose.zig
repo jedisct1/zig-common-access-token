@@ -4,14 +4,72 @@ const AutoHashMap = std.AutoHashMap;
 const crypto = std.crypto;
 const testing = std.testing;
 
+const HmacSha256 = crypto.auth.hmac.sha2.HmacSha256;
+
 const Error = @import("error.zig").Error;
 const zbor = @import("zbor.zig");
 
 pub const ALG_HS256: i64 = 5;
 pub const HEADER_ALG: i64 = 1;
+pub const HEADER_CRIT: i64 = 2;
 pub const HEADER_KID: i64 = 4;
 pub const TAG_COSE_MAC0: u64 = 17;
 pub const TAG_CWT: u64 = 61;
+
+/// The only COSE header parameters needed to verify a token
+pub const Header = struct {
+    alg: ?i64 = null,
+    kid: ?[]const u8 = null,
+};
+
+pub fn readHeader(allocator: Allocator, decoder: *zbor.Decoder) !Header {
+    var header: Header = .{};
+    var items = try decoder.mapItems();
+    while (try items.next(decoder)) {
+        // Text labels are private parameters, which we don't use.
+        if (try decoder.peekMajorType() == .TextString) {
+            try decoder.skip();
+            try decoder.skip();
+            continue;
+        }
+        switch (try decoder.readInt(i64)) {
+            HEADER_ALG => header.alg = try decoder.readInt(i64),
+            // Core parameters never go in crit, so it always names an extension that we don't support.
+            HEADER_CRIT => return Error.InvalidTokenHeader,
+            // The key ID should be a byte string, but some implementations send text.
+            HEADER_KID => header.kid = switch (try decoder.peekMajorType()) {
+                .ByteString => try decoder.readBytes(allocator),
+                .TextString => try decoder.readText(allocator),
+                else => return Error.InvalidTokenHeader,
+            },
+            else => try decoder.skip(),
+        }
+    }
+    return header;
+}
+
+/// Verifies a COSE_Mac0 tag. `protected` must be the header bytes as received, since that's what the MAC covers.
+pub fn verifyTag(allocator: Allocator, protected: []const u8, payload: []const u8, tag: []const u8, key: []const u8) !void {
+    if (tag.len != HmacSha256.mac_length) return Error.TagMismatch;
+    const expected_tag = try computeTag(allocator, protected, payload, key);
+    if (!crypto.timing_safe.eql([HmacSha256.mac_length]u8, expected_tag, tag[0..HmacSha256.mac_length].*)) {
+        return Error.TagMismatch;
+    }
+}
+
+fn computeTag(allocator: Allocator, protected: []const u8, payload: []const u8, key: []const u8) ![HmacSha256.mac_length]u8 {
+    var mac_structure = try zbor.Encoder.init(allocator);
+    defer mac_structure.deinit();
+    try mac_structure.beginArray(4);
+    try mac_structure.pushText("MAC0");
+    try mac_structure.pushBytes(protected);
+    try mac_structure.pushBytes("");
+    try mac_structure.pushBytes(payload);
+
+    var tag: [HmacSha256.mac_length]u8 = undefined;
+    HmacSha256.create(&tag, mac_structure.finish(), key);
+    return tag;
+}
 
 /// COSE_Mac0 structure as defined in RFC 8152 Section 6.2.
 ///
@@ -53,55 +111,33 @@ pub const CoseMac0 = struct {
 
     /// Creates an authentication tag for the COSE_Mac0 structure.
     pub fn createTag(self: *CoseMac0, key: []const u8) !void {
-        var tag_buf: [crypto.auth.hmac.sha2.HmacSha256.mac_length]u8 = undefined;
-        try self.computeMac(key, &tag_buf);
-        self.tag = try self.allocator.dupe(u8, &tag_buf);
+        const protected_header_cbor = try serializeCbor(self.allocator, self.protected_header);
+        defer self.allocator.free(protected_header_cbor);
+
+        const tag = try computeTag(self.allocator, protected_header_cbor, self.payload, key);
+        self.tag = try self.allocator.dupe(u8, &tag);
     }
 
     /// Verifies the authentication tag of the COSE_Mac0 structure.
     pub fn verify(self: *const CoseMac0, key: []const u8) !void {
-        var expected_tag: [crypto.auth.hmac.sha2.HmacSha256.mac_length]u8 = undefined;
-        try self.computeMac(key, &expected_tag);
+        const protected_header_cbor = try serializeCbor(self.allocator, self.protected_header);
+        defer self.allocator.free(protected_header_cbor);
 
-        if (!crypto.timing_safe.eql(u8, &expected_tag, self.tag)) {
-            return Error.TagMismatch;
-        }
-    }
-
-    /// Computes the HMAC-SHA256 MAC for this COSE_Mac0 structure.
-    fn computeMac(self: *const CoseMac0, key: []const u8, out_tag: *[crypto.auth.hmac.sha2.HmacSha256.mac_length]u8) !void {
-        var protected_header_cbor = std.ArrayList(u8).empty;
-        defer protected_header_cbor.deinit(self.allocator);
-        try serializeCbor(self.allocator, self.protected_header, &protected_header_cbor);
-
-        var mac_structure = std.ArrayList(u8).empty;
-        defer mac_structure.deinit(self.allocator);
-        try serializeMacStructure(
-            self.allocator,
-            "MAC0",
-            protected_header_cbor.items,
-            &[_]u8{},
-            self.payload,
-            &mac_structure,
-        );
-
-        crypto.auth.hmac.sha2.HmacSha256.create(out_tag, mac_structure.items, key);
+        try verifyTag(self.allocator, protected_header_cbor, self.payload, self.tag, key);
     }
 
     /// Serializes the COSE_Mac0 structure to CBOR
     pub fn toCbor(self: *const CoseMac0, out: *std.ArrayList(u8)) !void {
-        var protected_header_cbor = std.ArrayList(u8).empty;
-        defer protected_header_cbor.deinit(self.allocator);
-        try serializeCbor(self.allocator, self.protected_header, &protected_header_cbor);
+        const protected_header_cbor = try serializeCbor(self.allocator, self.protected_header);
+        defer self.allocator.free(protected_header_cbor);
 
-        var unprotected_header_cbor = std.ArrayList(u8).empty;
-        defer unprotected_header_cbor.deinit(self.allocator);
-        try serializeCbor(self.allocator, self.unprotected_header, &unprotected_header_cbor);
+        const unprotected_header_cbor = try serializeCbor(self.allocator, self.unprotected_header);
+        defer self.allocator.free(unprotected_header_cbor);
 
         try serializeCoseMac0(
             self.allocator,
-            protected_header_cbor.items,
-            unprotected_header_cbor.items,
+            protected_header_cbor,
+            unprotected_header_cbor,
             self.payload,
             self.tag,
             out,
@@ -114,11 +150,7 @@ pub const CoseMac0 = struct {
     }
 };
 
-fn serializeCbor(
-    allocator: Allocator,
-    map: AutoHashMap(i64, []const u8),
-    out: *std.ArrayList(u8),
-) !void {
+fn serializeCbor(allocator: Allocator, map: AutoHashMap(i64, []const u8)) ![]u8 {
     var encoder = try zbor.Encoder.init(allocator);
     defer encoder.deinit();
 
@@ -140,28 +172,7 @@ fn serializeCbor(
     }
 
     try encoder.endMap();
-    try out.appendSlice(allocator, encoder.finish());
-}
-
-fn serializeMacStructure(
-    allocator: Allocator,
-    context: []const u8,
-    protected: []const u8,
-    external_aad: []const u8,
-    payload: []const u8,
-    out: *std.ArrayList(u8),
-) !void {
-    var encoder = try zbor.Encoder.init(allocator);
-    defer encoder.deinit();
-
-    try encoder.beginArray(4);
-    try encoder.pushText(context);
-    try encoder.pushBytes(protected);
-    try encoder.pushBytes(external_aad);
-    try encoder.pushBytes(payload);
-    try encoder.endArray();
-
-    try out.appendSlice(allocator, encoder.finish());
+    return allocator.dupe(u8, encoder.finish());
 }
 
 fn serializeCoseMac0(

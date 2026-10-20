@@ -7,6 +7,7 @@ const Error = @import("error.zig").Error;
 const Claims = @import("claims.zig").Claims;
 const ClaimValue = @import("claims.zig").ClaimValue;
 const FingerprintType = @import("claims.zig").FingerprintType;
+const moqt = @import("moqt.zig");
 const LABEL_CATU = @import("claims.zig").LABEL_CATU;
 const LABEL_CATM = @import("claims.zig").LABEL_CATM;
 const LABEL_CATREPLAY = @import("claims.zig").LABEL_CATREPLAY;
@@ -224,7 +225,7 @@ pub fn validateCatu(allocator: Allocator, claims: Claims, uri: []const u8) !void
                 2 => .Suffix,
                 3 => .Contains,
                 4 => .Regex,
-                else => if (match_type_int == @intFromEnum(MatchType.Sha256)) .Sha256 else if (match_type_int == @intFromEnum(MatchType.Sha512_256)) .Sha512_256 else continue,
+                else => if (match_type_int == @backingInt(MatchType.Sha256)) .Sha256 else if (match_type_int == @backingInt(MatchType.Sha512_256)) .Sha512_256 else continue,
             };
 
             // Get the match value as string
@@ -319,7 +320,7 @@ pub fn validateCattprint(allocator: Allocator, claims: Claims, fingerprint_type:
     };
 
     // Compare fingerprint types (as integers)
-    const fingerprint_type_int = @intFromEnum(fingerprint_type);
+    const fingerprint_type_int = @backingInt(fingerprint_type);
     if (claim_type_int != fingerprint_type_int) {
         // Convert claim_type_int to FingerprintType for human-readable name
         // (For now just return the error, Zig doesn't have string formatting in errors like Rust)
@@ -349,4 +350,19 @@ pub fn validateCattprint(allocator: Allocator, claims: Claims, fingerprint_type:
     if (!std.mem.eql(u8, claim_value_lower, fingerprint_value_lower)) {
         return Error.InvalidTlsFingerprintClaim;
     }
+}
+
+/// Validate the moqt and moqt-reval claims (draft-ietf-moq-c4m) for a MoQT request.
+/// A token without a moqt claim allows nothing, since every action is blocked unless a scope allows it.
+pub fn validateMoqt(allocator: Allocator, claims: Claims, request: moqt.Request, min_reval_interval: ?u32) !void {
+    var claim = try claims.getMoqt(allocator) orelse return Error.MoqtNotAuthorized;
+    defer claim.deinit();
+
+    // A relay that can't revalidate as often as the token asks must reject it.
+    if (try claims.getMoqtReval()) |interval| {
+        const min_interval: f64 = @floatFromInt(min_reval_interval orelse return Error.MoqtRevalidationUnsupported);
+        if (interval < min_interval) return Error.MoqtRevalidationUnsupported;
+    }
+
+    if (!claim.permits(request)) return Error.MoqtNotAuthorized;
 }
