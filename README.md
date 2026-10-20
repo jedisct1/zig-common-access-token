@@ -45,6 +45,7 @@ Why use CAT tokens?
     - Usage
     - Data
     - Authorization
+  - Media over QUIC (MoQT) scopes and revalidation, from draft-ietf-moq-c4m.
   - Extend tokens with custom claims.
 
 - CBOR:
@@ -199,6 +200,45 @@ pub fn main() !void {
 }
 ```
 
+### Authorize Media over QUIC requests
+
+The library supports the `moqt` and `moqt-reval` claims from [draft-ietf-moq-c4m](https://datatracker.ietf.org/doc/draft-ietf-moq-c4m/). With them, a token says which Media over QUIC Transport (MoQT) actions a client can take, and on which tracks.
+
+A `moqt` claim is a list of scopes. Each scope lists actions, plus optional matches on the track namespace and the track name. Matches can be exact, prefix, or suffix. They compare raw bytes, with no normalization.
+
+```zig
+// Alice can connect, and publish video tracks under example.com/alice.
+try claims.setMoqt(&.{.{
+    .actions = &.{ .ClientSetup, .PublishNamespace, .Publish },
+    .namespace = &.{ .{ .Exact = "example.com" }, .{ .Exact = "alice" } },
+    .track = .{ .Prefix = "video-" },
+}});
+
+// Relays recheck the token at least every 5 minutes while she publishes.
+try claims.setMoqtReval(300);
+```
+
+On the relay, give `validate` the request you want to check:
+
+```zig
+var claims = try cat_instance.validate(token, .Mac, .{
+    .issuer = "issuer.example.com",
+    .moqt_request = .{ .action = .Publish, .namespace = &.{ "example.com", "alice" }, .track = "video-hd" },
+    .moqt_min_reval_interval = 60,
+});
+defer claims.deinit();
+```
+
+A few things to know:
+
+- With a `moqt_request`, a token without a `moqt` claim can't do anything. The draft blocks every action that no scope allows.
+- Setup actions only need to be listed. Namespace actions also check the namespace. Track actions check the track name too.
+- Set `moqt_min_reval_interval` to the shortest interval your relay can handle, in seconds. If you leave it out, tokens with a `moqt-reval` claim are rejected.
+- To revalidate a token, just call `validate` again.
+- To check many requests against one token, validate it once. Then parse the claim with `claims.getMoqt(allocator)`, and call `permits` for each request.
+- The draft doesn't assign claim keys yet. The library uses 327 and 328, like the draft's test vectors and rust-cat. They might change.
+- Composite claims (`or`, `and`) aren't supported yet, since their keys aren't assigned either. A `moqt` claim nested inside one doesn't count, so the token is denied.
+
 ## Examples
 
 You'll find ready-to-use examples in the `examples/` directory:
@@ -207,6 +247,7 @@ You'll find ready-to-use examples in the `examples/` directory:
 - validate.zig: Validate tokens and read their claims.
 - interop.zig: Test interoperability with the NodeJS implementation (node-cat).
 - cat_claims.zig: Use CAT-specific claims for more advanced use cases.
+- moqt.zig: Issue a Media over QUIC token, and check a few relay requests against it.
 - minimal.zig: Try the basic base64 encoding utilities.
 
 Run them with:
@@ -223,6 +264,9 @@ zig build interop [-- <token>]
 
 # Use CAT-specific claims
 zig build cat_claims
+
+# Authorize Media over QUIC requests
+zig build moqt
 
 # Run minimal example
 zig build minimal

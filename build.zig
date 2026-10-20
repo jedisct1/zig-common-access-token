@@ -75,6 +75,17 @@ pub fn build(b: *std.Build) void {
     cat_claims_example.root_module.addImport("cat", cat_module);
     b.installArtifact(cat_claims_example);
 
+    const moqt_example = b.addExecutable(.{
+        .name = "moqt",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/moqt.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    moqt_example.root_module.addImport("cat", cat_module);
+    b.installArtifact(moqt_example);
+
     const minimal_example = b.addExecutable(.{
         .name = "minimal",
         .root_module = b.createModule(.{
@@ -86,18 +97,18 @@ pub fn build(b: *std.Build) void {
     b.installArtifact(minimal_example);
 
     // Build tests
-    const tests = b.addTest(.{
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("tests/cat_test.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
-    });
-    tests.root_module.addImport("cat", cat_module);
-
-    const run_tests = b.addRunArtifact(tests);
     const test_step = b.step("test", "Run library tests");
-    test_step.dependOn(&run_tests.step);
+    for ([_][]const u8{ "tests/cat_test.zig", "tests/moqt_test.zig" }) |path| {
+        const tests = b.addTest(.{
+            .root_module = b.createModule(.{
+                .root_source_file = b.path(path),
+                .target = target,
+                .optimize = optimize,
+            }),
+        });
+        tests.root_module.addImport("cat", cat_module);
+        test_step.dependOn(&b.addRunArtifact(tests).step);
+    }
 
     // Run examples
     const run_generate = b.addRunArtifact(generate_example);
@@ -117,6 +128,10 @@ pub fn build(b: *std.Build) void {
     const run_cat_claims = b.addRunArtifact(cat_claims_example);
     const cat_claims_step = b.step("cat_claims", "Run the cat_claims example");
     cat_claims_step.dependOn(&run_cat_claims.step);
+
+    const run_moqt = b.addRunArtifact(moqt_example);
+    const moqt_step = b.step("moqt", "Run the MoQT example");
+    moqt_step.dependOn(&run_moqt.step);
 
     const run_minimal = b.addRunArtifact(minimal_example);
     const minimal_step = b.step("minimal", "Run the minimal example");
