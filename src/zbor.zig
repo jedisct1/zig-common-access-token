@@ -14,12 +14,12 @@ pub const MajorType = enum(u3) {
     Simple = 7,
 
     pub fn fromByte(byte: u8) MajorType {
-        return @enumFromInt((byte >> 5) & 0x7);
+        return @fromBackingInt(@intCast((byte >> 5) & 0x7));
     }
 
     /// Returns the type byte with additional info set to 0
     pub fn toByte(self: MajorType) u8 {
-        return @as(u8, @intFromEnum(self)) << 5;
+        return @as(u8, @backingInt(self)) << 5;
     }
 };
 
@@ -38,6 +38,10 @@ pub const SimpleValue = struct {
     pub const NULL: u8 = 22;
     pub const UNDEFINED: u8 = 23;
 };
+
+/// Maximum nesting of arrays, maps and tags accepted when decoding.
+/// Untrusted input must not be able to exhaust the stack.
+pub const max_nesting_depth = 32;
 
 pub const Encoder = struct {
     allocator: Allocator,
@@ -179,6 +183,16 @@ pub const Encoder = struct {
         } else {
             @compileError("Unsupported type for pushFloat");
         }
+    }
+
+    /// Encodes a float with the shortest width that keeps its exact value.
+    /// This is the preferred serialization of RFC 8949, Section 4.2.2.
+    pub fn pushFloatShortest(self: *Encoder, value: f64) !void {
+        const half: f16 = @floatCast(value);
+        if (std.math.isNan(value) or half == value) return self.pushFloat(half);
+        const single: f32 = @floatCast(value);
+        if (single == value) return self.pushFloat(single);
+        return self.pushFloat(value);
     }
 
     pub fn pushBytes(self: *Encoder, bytes: []const u8) !void {
@@ -404,7 +418,7 @@ pub const Decoder = struct {
             }
             const full_value = std.mem.readInt(u64, self.data[self.pos..][0..8], .big);
             self.pos += 8;
-            return @intCast(full_value);
+            return std.math.cast(usize, full_value) orelse error.Overflow;
         } else {
             return error.UnsupportedAdditionalInfo;
         }
@@ -551,14 +565,13 @@ pub const Decoder = struct {
         const value = try self.readAdditionalValue(additional_info);
 
         if (major_type == .NegativeInt) {
-            if (T == i8 or T == i16 or T == i32 or T == i64 or T == i128 or T == isize) {
-                const neg_value = @as(i64, -1) - @as(i64, @intCast(value));
-                return @as(T, @intCast(neg_value));
-            } else {
+            if (@typeInfo(T).int.signedness == .unsigned) {
                 return error.NegativeValueInUnsignedType;
             }
+            const magnitude = std.math.cast(T, value) orelse return error.Overflow;
+            return -1 - magnitude;
         } else {
-            return @as(T, @intCast(value));
+            return std.math.cast(T, value) orelse error.Overflow;
         }
     }
 
@@ -583,6 +596,10 @@ pub const Decoder = struct {
                     break;
                 }
 
+                // Chunks must be definite-length strings, so they cannot nest.
+                if (try self.peekAdditionalInfo() == AdditionalInfo.INDEFINITE) {
+                    return error.InvalidIndefiniteChunk;
+                }
                 const chunk = try self.readBytes(allocator);
                 defer allocator.free(chunk);
 
@@ -593,7 +610,7 @@ pub const Decoder = struct {
         } else {
             const len = try self.readAdditionalValue(additional_info);
 
-            if (self.pos + len > self.data.len) {
+            if (len > self.remaining().len) {
                 return error.EndOfBuffer;
             }
 
@@ -624,6 +641,9 @@ pub const Decoder = struct {
                     break;
                 }
 
+                if (try self.peekAdditionalInfo() == AdditionalInfo.INDEFINITE) {
+                    return error.InvalidIndefiniteChunk;
+                }
                 const chunk = try self.readText(allocator);
                 defer allocator.free(chunk);
 
@@ -634,7 +654,7 @@ pub const Decoder = struct {
         } else {
             const len = try self.readAdditionalValue(additional_info);
 
-            if (self.pos + len > self.data.len) {
+            if (len > self.remaining().len) {
                 return error.EndOfBuffer;
             }
 
@@ -645,6 +665,13 @@ pub const Decoder = struct {
     }
 
     pub fn skip(self: *Decoder) !void {
+        try self.skipNested(0);
+    }
+
+    fn skipNested(self: *Decoder, depth: usize) !void {
+        if (depth > max_nesting_depth) {
+            return error.NestingTooDeep;
+        }
         const major_type = try self.peekMajorType();
         const additional_info = try self.peekAdditionalInfo();
         self.pos += 1;
@@ -665,12 +692,12 @@ pub const Decoder = struct {
                             break;
                         }
 
-                        try self.skip();
+                        try self.skipNested(depth + 1);
                     }
                 } else {
                     const len = try self.readAdditionalValue(additional_info);
 
-                    if (self.pos + len > self.data.len) {
+                    if (len > self.remaining().len) {
                         return error.EndOfBuffer;
                     }
 
@@ -687,13 +714,13 @@ pub const Decoder = struct {
                             break;
                         }
 
-                        try self.skip();
+                        try self.skipNested(depth + 1);
                     }
                 } else {
                     const len = try self.readAdditionalValue(additional_info);
 
                     for (0..len) |_| {
-                        try self.skip();
+                        try self.skipNested(depth + 1);
                     }
                 }
             },
@@ -707,31 +734,36 @@ pub const Decoder = struct {
                             break;
                         }
 
-                        try self.skip();
-                        try self.skip();
+                        try self.skipNested(depth + 1);
+                        try self.skipNested(depth + 1);
                     }
                 } else {
                     const len = try self.readAdditionalValue(additional_info);
 
                     for (0..len) |_| {
-                        try self.skip();
-                        try self.skip();
+                        try self.skipNested(depth + 1);
+                        try self.skipNested(depth + 1);
                     }
                 }
             },
             .Tag => {
-                try self.skip();
+                if (additional_info > AdditionalInfo.DIRECT) {
+                    _ = try self.readAdditionalValue(additional_info);
+                }
+                try self.skipNested(depth + 1);
             },
             .Simple => {
-                if (additional_info == AdditionalInfo.ONE_BYTE) {
-                    self.pos += 1;
-                } else if (additional_info == AdditionalInfo.TWO_BYTES) {
-                    self.pos += 2;
-                } else if (additional_info == AdditionalInfo.FOUR_BYTES) {
-                    self.pos += 4;
-                } else if (additional_info == AdditionalInfo.EIGHT_BYTES) {
-                    self.pos += 8;
+                const len: usize = switch (additional_info) {
+                    AdditionalInfo.ONE_BYTE => 1,
+                    AdditionalInfo.TWO_BYTES => 2,
+                    AdditionalInfo.FOUR_BYTES => 4,
+                    AdditionalInfo.EIGHT_BYTES => 8,
+                    else => 0,
+                };
+                if (len > self.remaining().len) {
+                    return error.EndOfBuffer;
                 }
+                self.pos += len;
             },
         }
     }
